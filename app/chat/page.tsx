@@ -1,32 +1,24 @@
-import Link from "next/link";
 import { ChatContainer } from "@/components/chat/ChatContainer";
-import { deensBistro } from "@/lib/data/deens-bistro";
-import { Button } from "@/components/ui/Button";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { getStoreInfo } from "@/lib/store/info";
+
+export const dynamic = "force-dynamic";
 
 export default function ChatPage() {
+  const info = getStoreInfo();
+
   return (
-    <div className="mx-auto flex h-screen max-w-lg flex-col bg-white">
-      <header className="border-b border-stone-200 px-4 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <Link href="/menu">
-            <Button variant="ghost" size="sm">
-              ← Menu
-            </Button>
-          </Link>
-          <div className="text-center">
-            <h1 className="text-sm font-semibold text-stone-900">
-              Chat Simulator
-            </h1>
-            <p className="text-xs text-stone-500">{deensBistro.name}</p>
-          </div>
-          <Link href="/">
-            <Button variant="ghost" size="sm">
-              Exit
-            </Button>
-          </Link>
-        </div>
-      </header>
-      <ChatContainer restaurantName={deensBistro.name} />
-    </div>
+    <DashboardLayout fullHeight>
+      <div className="border-b border-stone-200 px-8 py-4">
+        <h1 className="text-lg font-semibold text-stone-900">Chat Simulator</h1>
+        <p className="text-sm text-stone-500">{info.name}</p>
+      </div>
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col">
+        <ChatContainer
+          restaurantName={info.name}
+          logoUrl={info.logo_data_url}
+        />
+      </div>
+    </DashboardLayout>
   );
 }

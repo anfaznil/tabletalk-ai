@@ -1,6 +1,6 @@
 import type { MenuItem } from "@/lib/data/deens-bistro";
 import { getHours } from "@/lib/store/hours";
-import type { OrderSize } from "@/lib/store/orders";
+import type { OrderSize } from "@/types/orders";
 import { calculateReadyBy } from "@/lib/orders/ready-time";
 import type { OrderItemInput } from "@/lib/orders/validate";
 

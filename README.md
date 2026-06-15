@@ -80,11 +80,11 @@ This MVP simulates phone calls through a web chat for **Deen's Bistro**, a sampl
 
 ### 1. No database (yet)
 
-All state lives in in-memory stores (`lib/store/*`) attached to `globalThis`, seeded from mock data in `lib/data/deens-bistro.ts`.
+All state lives in in-memory stores (`lib/store/*`) attached to `globalThis`, seeded from mock data in `lib/data/deens-bistro.ts` and persisted to a local JSON file (`data/store.json`, gitignored) via `lib/store/persist.ts`.
 
-**Why:** The goal of this MVP is to validate the customer experience — how the AI talks, takes orders, and handles edge cases — before investing in infrastructure. In-memory state allows instant iteration with zero setup. The store modules expose the same function shapes (`getX`, `addX`, `updateX`) a database layer would, so swapping in Supabase later is a contained change.
+**Why:** The goal of this MVP is to validate the customer experience — how the AI talks, takes orders, and handles edge cases — before investing in infrastructure. File-backed state allows instant iteration with zero setup while surviving page refreshes and dev-server restarts. The store modules expose the same function shapes (`getX`, `addX`, `updateX`) a database layer would, so swapping in Supabase later is a contained change.
 
-**Trade-off:** Data resets on server restart. Acceptable for a demo; not for production.
+**Trade-off:** A single JSON file has no concurrency control or multi-tenancy. Acceptable for a demo; not for production.
 
 ### 2. Server-side calculation tools (never trust the LLM with math)
 

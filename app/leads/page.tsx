@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { OwnerNav } from "@/components/layout/OwnerNav";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { LeadsTable } from "@/components/dashboard/LeadsTable";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -25,21 +26,17 @@ export default function LeadsPage() {
   }, [loadLeads]);
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <OwnerNav active="/leads" />
-
-      <main className="mx-auto max-w-4xl space-y-4 p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-stone-900">Leads</h1>
-            <p className="text-sm text-stone-500">
-              Catering & large orders · resets on server restart
-            </p>
-          </div>
+    <DashboardLayout>
+      <PageHeader
+        title="Leads"
+        description="Catering and large-order inquiries"
+        action={
           <Button variant="secondary" size="sm" onClick={loadLeads}>
             Refresh
           </Button>
-        </div>
+        }
+      />
+      <div className="px-8 py-6">
         <Card>
           {loading ? (
             <p className="py-8 text-center text-sm text-stone-500">
@@ -49,7 +46,7 @@ export default function LeadsPage() {
             <LeadsTable leads={leads} />
           )}
         </Card>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

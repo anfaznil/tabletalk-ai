@@ -1,4 +1,5 @@
 import { deensBistro } from "@/lib/data/deens-bistro";
+import { loadPersisted, savePersisted } from "@/lib/store/persist";
 
 export type WeeklyHours = Record<string, string>;
 
@@ -19,7 +20,7 @@ export const HOURS_PATTERN =
 const globalStore = globalThis as unknown as { hours: WeeklyHours };
 
 if (!globalStore.hours) {
-  globalStore.hours = { ...deensBistro.hours };
+  globalStore.hours = loadPersisted("hours", () => ({ ...deensBistro.hours }));
 }
 
 export function getHours(): WeeklyHours {
@@ -47,5 +48,6 @@ export function updateHours(updates: WeeklyHours): {
     globalStore.hours[day] = trimmed;
   }
 
+  savePersisted("hours", globalStore.hours);
   return { hours: globalStore.hours, errors };
 }

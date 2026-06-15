@@ -1,3 +1,7 @@
+import type { MenuItemAvailability } from "@/types/menu";
+
+export type { MenuItemAvailability } from "@/types/menu";
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -5,6 +9,10 @@ export interface MenuItem {
   price: number;
   category: string;
   prep_time_minutes: number;
+  availability?: MenuItemAvailability;
+  /** YYYY-MM-DD local date when marked sold out today — used for midnight reset. */
+  sold_out_today_on?: string;
+  sort_order?: number;
 }
 
 export interface FAQ {

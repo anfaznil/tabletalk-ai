@@ -13,10 +13,15 @@
 
 # next.js
 /.next/
+/.next-trash-*/
 /out/
 
 # production
 /build
+
+# local persisted store data
+/data/store.json
+/data/accounts/
 
 # misc
 .DS_Store

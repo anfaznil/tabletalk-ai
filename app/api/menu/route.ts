@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { addMenuItem, getMenuItems, updateMenuItem } from "@/lib/store/menu";
+import { ensureCategory } from "@/lib/store/categories";
+import {
+  addMenuItem,
+  getMenuItems,
+  reorderMenuItemsInCategory,
+  updateMenuItem,
+} from "@/lib/store/menu";
 
 export async function GET() {
   return NextResponse.json(getMenuItems());
@@ -22,13 +28,30 @@ export async function POST(request: Request) {
     price: Number(price),
     category: category ?? "General",
     prep_time_minutes: Number(prep_time_minutes),
+    availability: body.availability ?? "in_stock",
+    sort_order: body.sort_order,
   });
+  ensureCategory(item.category);
 
   return NextResponse.json(item, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
   const body = await request.json();
+
+  if (body?.action === "reorder") {
+    const { error } = reorderMenuItemsInCategory(
+      String(body?.category ?? ""),
+      Array.isArray(body?.itemIds) ? body.itemIds.map(String) : []
+    );
+
+    if (error) {
+      return NextResponse.json({ error }, { status: 400 });
+    }
+
+    return NextResponse.json(getMenuItems());
+  }
+
   const { id, ...updates } = body;
 
   if (!id) {
@@ -46,6 +69,7 @@ export async function PATCH(request: Request) {
   if (!updated) {
     return NextResponse.json({ error: "Menu item not found" }, { status: 404 });
   }
+  ensureCategory(updated.category);
 
   return NextResponse.json(updated);
 }

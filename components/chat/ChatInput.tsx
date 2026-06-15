@@ -30,7 +30,7 @@ export function ChatInput({
         onChange={(e) => setText(e.target.value)}
         placeholder="Type your message..."
         disabled={disabled}
-        className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+        className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
       />
       <Button type="submit" disabled={disabled || !text.trim()}>
         Send

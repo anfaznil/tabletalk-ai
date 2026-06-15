@@ -1,6 +1,15 @@
+import { type ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
 import { formatCurrency } from "@/lib/utils/format";
 import type { Restaurant } from "@/lib/data/deens-bistro";
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="border-b-2 border-teal-600 pb-1 text-lg font-semibold text-stone-900">
+      {children}
+    </h2>
+  );
+}
 
 export function RestaurantInfo({ restaurant }: { restaurant: Restaurant }) {
   const dayLabels: Record<string, string> = {
@@ -13,28 +22,21 @@ export function RestaurantInfo({ restaurant }: { restaurant: Restaurant }) {
     sun: "Sunday",
   };
 
-  return (
-    <div className="space-y-4">
-      <Card>
-        <h2 className="text-lg font-semibold">{restaurant.name}</h2>
-        <dl className="mt-3 space-y-1 text-sm text-stone-600">
-          <div>
-            <dt className="inline font-medium text-stone-700">Address: </dt>
-            <dd className="inline">{restaurant.address}</dd>
-          </div>
-          <div>
-            <dt className="inline font-medium text-stone-700">Phone: </dt>
-            <dd className="inline">{restaurant.phone}</dd>
-          </div>
-        </dl>
-      </Card>
+  const menuGroups = new Map<string, typeof restaurant.menu_items>();
+  for (const item of restaurant.menu_items) {
+    const category = item.category || "Other";
+    if (!menuGroups.has(category)) menuGroups.set(category, []);
+    menuGroups.get(category)!.push(item);
+  }
 
+  return (
+    <div className="space-y-6">
       <Card>
-        <h3 className="font-semibold">Hours</h3>
-        <ul className="mt-2 space-y-1 text-sm text-stone-600">
+        <SectionTitle>Hours</SectionTitle>
+        <ul className="mt-4 space-y-1 text-sm text-stone-600">
           {Object.entries(restaurant.hours).map(([day, hours]) => (
             <li key={day}>
-              <span className="font-medium text-stone-700">
+              <span className="font-medium text-stone-800">
                 {dayLabels[day] ?? day}:
               </span>{" "}
               {hours}
@@ -44,29 +46,40 @@ export function RestaurantInfo({ restaurant }: { restaurant: Restaurant }) {
       </Card>
 
       <Card>
-        <h3 className="font-semibold">Menu</h3>
-        <ul className="mt-2 divide-y divide-stone-100">
-          {restaurant.menu_items.map((item) => (
-            <li key={item.id} className="py-2 text-sm">
-              <div className="flex justify-between">
-                <span className="font-medium">{item.name}</span>
-                <span className="text-stone-600">
-                  {formatCurrency(item.price)} · {item.prep_time_minutes} min
-                </span>
-              </div>
-              <p className="text-stone-500">{item.description}</p>
-            </li>
-          ))}
-        </ul>
+        <SectionTitle>Menu</SectionTitle>
+        {[...menuGroups.entries()].map(([category, items]) => (
+          <div key={category} className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-stone-400">
+              {category}
+            </h3>
+            <ul className="divide-y divide-stone-100">
+              {items.map((item) => (
+                <li key={item.id} className="py-3 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span className="font-medium text-stone-900">
+                      {item.name}
+                    </span>
+                    <span className="shrink-0 text-stone-500">
+                      {formatCurrency(item.price)} · {item.prep_time_minutes} min
+                    </span>
+                  </div>
+                  {item.description && (
+                    <p className="mt-0.5 text-stone-500">{item.description}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </Card>
 
       <Card>
-        <h3 className="font-semibold">FAQs</h3>
-        <dl className="mt-2 space-y-3">
+        <SectionTitle>FAQs</SectionTitle>
+        <dl className="mt-4 space-y-4">
           {restaurant.faqs.map((faq) => (
             <div key={faq.id} className="text-sm">
-              <dt className="font-medium text-stone-800">{faq.question}</dt>
-              <dd className="mt-0.5 text-stone-600">{faq.answer}</dd>
+              <dt className="font-medium text-stone-900">{faq.question}</dt>
+              <dd className="mt-1 text-stone-600">{faq.answer}</dd>
             </div>
           ))}
         </dl>

@@ -1,3 +1,5 @@
+import { loadPersisted, savePersisted } from "@/lib/store/persist";
+
 export type LeadType = "catering" | "large_order";
 
 export interface Lead {
@@ -14,7 +16,7 @@ export interface Lead {
 const globalStore = globalThis as unknown as { leads: Lead[] };
 
 if (!globalStore.leads) {
-  globalStore.leads = [];
+  globalStore.leads = loadPersisted("leads", () => []);
 }
 
 export function addLead(
@@ -26,6 +28,7 @@ export function addLead(
     created_at: new Date().toISOString(),
   };
   globalStore.leads.unshift(lead);
+  savePersisted("leads", globalStore.leads);
   return lead;
 }
 

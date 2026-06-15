@@ -5,7 +5,13 @@ import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import type { ChatMessage } from "@/types";
 
-export function ChatContainer({ restaurantName }: { restaurantName: string }) {
+export function ChatContainer({
+  restaurantName,
+  logoUrl,
+}: {
+  restaurantName: string;
+  logoUrl?: string | null;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -63,7 +69,7 @@ export function ChatContainer({ restaurantName }: { restaurantName: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <MessageList messages={messages} loading={loading} />
+      <MessageList messages={messages} loading={loading} logoUrl={logoUrl} />
       {error && (
         <p className="px-4 pb-2 text-sm text-red-600">{error}</p>
       )}

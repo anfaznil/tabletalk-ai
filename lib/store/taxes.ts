@@ -1,3 +1,5 @@
+import { loadPersisted, savePersisted } from "@/lib/store/persist";
+
 export interface TaxConfig {
   food_beverage_tax_percent: number;
   sales_tax_percent: number;
@@ -11,7 +13,7 @@ const DEFAULT_TAXES: TaxConfig = {
 const globalStore = globalThis as unknown as { taxes: TaxConfig };
 
 if (!globalStore.taxes) {
-  globalStore.taxes = { ...DEFAULT_TAXES };
+  globalStore.taxes = loadPersisted("taxes", () => ({ ...DEFAULT_TAXES }));
 }
 
 export function getTaxes(): TaxConfig {
@@ -26,5 +28,6 @@ export function updateTaxes(updates: Partial<TaxConfig>): TaxConfig {
     sales_tax_percent:
       updates.sales_tax_percent ?? globalStore.taxes.sales_tax_percent,
   };
+  savePersisted("taxes", globalStore.taxes);
   return globalStore.taxes;
 }

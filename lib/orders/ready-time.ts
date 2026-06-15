@@ -1,5 +1,5 @@
 import type { MenuItem } from "@/lib/data/deens-bistro";
-import type { OrderSize } from "@/lib/store/orders";
+import type { OrderSize } from "@/types/orders";
 import { calculateOrderPrepMinutes } from "@/lib/orders/prep-time";
 import type { OrderItemInput } from "@/lib/orders/validate";
 
@@ -45,6 +45,16 @@ export function calculateReadyBy(
     total_minutes,
     rush_applied: rush,
   };
+}
+
+/** Customer-facing wait estimate — e.g. "15 minutes". */
+export function formatWaitMinutes(minutes: number): string {
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+}
+
+/** Spoken wait-time phrase for phone calls — e.g. "and it'll be ready in about 10 minutes". */
+export function formatSpokenReadyIn(minutes: number): string {
+  return `and it'll be ready in about ${formatWaitMinutes(minutes)}`;
 }
 
 export function formatReadyBy(date: Date | string): string {
