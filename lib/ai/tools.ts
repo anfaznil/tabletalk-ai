@@ -124,7 +124,7 @@ export const aiTools = [
     function: {
       name: "transfer_to_staff",
       description:
-        "Transfer the customer to a human employee at the restaurant. Required when a customer calls back to change, cancel, add, or remove items on an existing order — you cannot modify orders yourself. Also use for complaints or anything requiring a manager.",
+        "Transfer the customer to a human at the restaurant. Call this in the SAME turn — do not ask permission first. Required when: order changes/cancellations; sensitive or controversial questions (certifications, sourcing, slaughter, allergens, policy); any question not explicitly answered in restaurant data; any uncertainty — never guess. Also complaints or manager requests. The customer must never be left hanging without an answer or a live transfer.",
       parameters: {
         type: "object",
         properties: {

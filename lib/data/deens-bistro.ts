@@ -143,7 +143,7 @@ export const deensBistro: Restaurant = {
     {
       id: "faq-1",
       question: "Are you halal?",
-      answer: "Yes, all of our meat is 100% halal certified.",
+      answer: "Yeah — all our meat is halal certified.",
     },
     {
       id: "faq-2",

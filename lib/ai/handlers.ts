@@ -133,7 +133,7 @@ function transferToStaff(args: Record<string, unknown>): ToolResult {
 
   return {
     success: true,
-    message: `Transfer${who} requested: ${reason}. Tell the customer you're connecting them with someone at the restaurant — e.g. "Yeah, let me get you over to someone here who can update that — one sec." Keep it short and natural. Do NOT try to cancel, change, or add to the order yourself. Do NOT say "let me check again." Restaurant phone (internal): ${phone}.`,
+    message: `Transfer${who} requested: ${reason}. This must close the customer's question — they should not be left hanging. Tell them you're connecting them now (one short line), then confirm the handoff. Examples: "Yeah, let me get you over to someone who can help with that — one sec." / "Hand-cut zabiha? Let me connect you with someone here who'd know for sure — one sec." Do NOT ask "would you like me to connect you?" — just connect. Do NOT guess, hedge, or say you're unsure without transferring. Do NOT say "let me check again." Restaurant phone (internal): ${phone}.`,
   };
 }
 
