@@ -67,6 +67,18 @@ export function handleToolCall(
   }
 }
 
+function formatOrderLineItemsForReorder(items: OrderItem[]): string {
+  return items
+    .map((i) => {
+      const customizationIds =
+        i.customizations?.length > 0
+          ? i.customizations.map((c) => c.id).join(", ")
+          : "none";
+      return `menu_item_id: ${i.menu_item_id} | qty: ${i.quantity} | customization_ids: [${customizationIds}] (${i.item_name})`;
+    })
+    .join("\n");
+}
+
 function formatOrderLookupSummary(order: Order): string {
   const items = formatItemList(order.items);
   const placed = new Date(order.created_at).toLocaleString("en-US", {
@@ -78,26 +90,33 @@ function formatOrderLookupSummary(order: Order): string {
   });
   const modifiable =
     order.status === "pending" ? "yes" : "no — already completed";
+  const reorderLines = formatOrderLineItemsForReorder(order.items);
 
-  return `order_id: ${order.id} | items: ${items} | total: ${formatCurrency(order.total)} | status: ${order.status} | placed: ${placed} | modifiable: ${modifiable}`;
+  return `order_id: ${order.id} | items: ${items} | total: ${formatCurrency(order.total)} | status: ${order.status} | placed: ${placed} | modifiable: ${modifiable}\nreorder_line_items:\n${reorderLines}`;
 }
 
 function lookupGuidance(name: string, orders: Order[]): string {
   const pending = orders.filter((o) => o.status === "pending");
+  const mostRecent = [...orders].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )[0];
+  const usualItems = formatItemList(mostRecent.items);
+
+  const reorderGuidance = `REORDER / "THE USUAL" / "same as last time": Use most recent order ${mostRecent.id} (${usualItems}). Read back casually — e.g. "Hey ${name}, last time you got ${usualItems} — want that again?" If yes, use reorder_line_items from that order in capture_order (check availability first — swap sold-out items naturally). This is a NEW pickup order, not a modification. If they already gave their name, don't ask again. Continue normal order flow then capture_order.`;
+
+  const changeGuidance =
+    "If they want to CHANGE, CANCEL, ADD TO, or REMOVE FROM an existing active order → call transfer_to_staff immediately (you cannot modify orders).";
 
   if (pending.length === 1) {
-    return `Read back the one active order briefly — e.g. "Hey ${name}, I see you ordered ${formatItemList(pending[0].items)} — that one's still in progress." Do NOT ask them to repeat their order from scratch. If they want to change, cancel, add, or remove anything → call transfer_to_staff immediately (you cannot modify orders).`;
+    return `${reorderGuidance}\n\nORDER STATUS: One active order in progress — ${formatItemList(pending[0].items)}. Read back briefly if they ask where it is.\n\n${changeGuidance}`;
   }
 
   if (pending.length > 1) {
-    return `Multiple active orders found. Read each briefly and ask which one they mean if needed for a status check. If they want to change, cancel, add, or remove anything → call transfer_to_staff immediately (you cannot modify orders).`;
+    return `${reorderGuidance}\n\nORDER STATUS: Multiple active orders — read each briefly if they ask about status.\n\n${changeGuidance}`;
   }
 
-  if (orders.every((o) => o.status === "completed")) {
-    return `All matching orders are already completed — changes are not possible. Tell the customer naturally that it's too late to change those orders.`;
-  }
-
-  return `No active pending order found. Tell the customer what you do see (older or completed orders) and ask how you can help — maybe a new order instead.`;
+  return `${reorderGuidance}\n\n${changeGuidance}`;
 }
 
 function lookupCustomerOrders(args: Record<string, unknown>): ToolResult {
@@ -112,7 +131,7 @@ function lookupCustomerOrders(args: Record<string, unknown>): ToolResult {
   if (!orders.length) {
     return {
       success: true,
-      message: `No orders found for "${customer_name}". Tell the customer you don't see an order under that name — ask if they ordered under a different name, or offer to take a new order.`,
+      message: `No orders found for "${customer_name}". For "the usual" / reorder requests: tell them you don't see a past order under that name — ask if they ordered under a different name, or take a fresh order from the menu. Do NOT transfer. For order status: same — no match under that name.`,
     };
   }
 

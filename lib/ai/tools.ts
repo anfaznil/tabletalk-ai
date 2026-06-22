@@ -106,7 +106,7 @@ export const aiTools = [
     function: {
       name: "lookup_customer_orders",
       description:
-        "Find previous orders by customer name. Use only when a customer wants to CHECK order status — not to change, cancel, or add items (those go to transfer_to_staff). If they already introduced themselves (e.g. 'this is Sir'), use that name — do not ask again.",
+        "Find previous orders by customer name. Use for: (1) reorder / 'the usual' / 'same as last time' — read back their most recent order and rebuild it as a new pickup order; (2) checking status on an active order. NOT for changing, canceling, or adding to an existing order — those go to transfer_to_staff. If they already introduced themselves (e.g. 'this is Sir'), use that name — do not ask again.",
       parameters: {
         type: "object",
         properties: {
@@ -124,7 +124,7 @@ export const aiTools = [
     function: {
       name: "transfer_to_staff",
       description:
-        "Transfer the customer to a human at the restaurant. Call this in the SAME turn — do not ask permission first. Required when: order changes/cancellations; sensitive or controversial questions (certifications, sourcing, slaughter, allergens, policy); any question not explicitly answered in restaurant data; any uncertainty — never guess. Also complaints or manager requests. The customer must never be left hanging without an answer or a live transfer.",
+        "Transfer the customer to a human at the restaurant. Call this in the SAME turn — do not ask permission first. Required when: order changes/cancellations on EXISTING orders; sensitive or controversial questions (certifications, sourcing, slaughter, allergens, policy); informational questions not explicitly answered in restaurant data; any uncertainty on FAQ-style questions — never guess. NOT for reorder / 'the usual' / new pickup orders — use lookup_customer_orders + capture_order instead. Also complaints or manager requests.",
       parameters: {
         type: "object",
         properties: {
