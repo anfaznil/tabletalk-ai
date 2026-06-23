@@ -42,11 +42,13 @@ export function MenuItemRow({
         event.preventDefault();
         onPointerDragStart(event);
       }}
-      className={`flex touch-none items-start gap-3 border border-transparent px-2 py-4 ${
+      className={`flex touch-none flex-wrap items-start gap-x-3 gap-y-2 border border-transparent px-2 py-4 ${
         dragDisabled ? "" : "cursor-grab active:cursor-grabbing"
       }`}
     >
-      <MenuItemRowBody item={item} />
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <MenuItemRowBody item={item} />
+      </div>
       <MenuItemRowActions
         item={item}
         editing={editing}

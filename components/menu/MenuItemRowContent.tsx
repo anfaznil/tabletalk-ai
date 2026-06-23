@@ -58,7 +58,7 @@ export function MenuItemRowActions({
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2" data-no-drag="true">
+    <div className="flex shrink-0 flex-wrap items-center gap-2" data-no-drag="true">
       <label className="sr-only" htmlFor={`availability-${item.id}`}>
         Availability for {item.name}
       </label>
