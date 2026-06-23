@@ -22,12 +22,22 @@ export async function POST(request: Request) {
     );
   }
 
+  const numericPrice = Number(price);
+  const numericPrep = Number(prep_time_minutes);
+
+  if (isNaN(numericPrice) || numericPrice < 0) {
+    return NextResponse.json({ error: "price must be a non-negative number" }, { status: 400 });
+  }
+  if (isNaN(numericPrep) || numericPrep < 0) {
+    return NextResponse.json({ error: "prep_time_minutes must be a non-negative number" }, { status: 400 });
+  }
+
   const item = addMenuItem({
     name,
     description: description ?? "",
-    price: Number(price),
+    price: numericPrice,
     category: category ?? "General",
-    prep_time_minutes: Number(prep_time_minutes),
+    prep_time_minutes: numericPrep,
     availability: body.availability ?? "in_stock",
     sort_order: body.sort_order,
   });

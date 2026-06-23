@@ -52,10 +52,10 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name") ?? "";
 
-  const { error } = deleteCategory(name);
+  const { error, deletedItemCount } = deleteCategory(name);
   if (error) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, deletedItemCount });
 }

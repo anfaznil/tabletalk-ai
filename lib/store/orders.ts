@@ -144,8 +144,11 @@ export function completeOrder(id: string): Order | null {
   const index = globalStore.orders.findIndex((o) => o.id === id);
   if (index === -1) return null;
 
+  const current = normalizeOrder(globalStore.orders[index]);
+  if (current.status === "completed") return current;
+
   globalStore.orders[index] = {
-    ...normalizeOrder(globalStore.orders[index]),
+    ...current,
     status: "completed",
     completed_at: new Date().toISOString(),
   };

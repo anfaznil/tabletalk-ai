@@ -11,7 +11,11 @@ export async function PATCH(
   const numericFields = ["price", "prep_time_minutes"] as const;
   for (const field of numericFields) {
     if (body[field] !== undefined) {
-      body[field] = Number(body[field]);
+      const n = Number(body[field]);
+      if (isNaN(n) || n < 0) {
+        return NextResponse.json({ error: `${field} must be a non-negative number` }, { status: 400 });
+      }
+      body[field] = n;
     }
   }
 

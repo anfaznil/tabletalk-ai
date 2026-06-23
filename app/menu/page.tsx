@@ -300,7 +300,7 @@ export default function MenuPage() {
   async function deleteCategory(name: string, count: number) {
     const warning =
       count > 0
-        ? `Delete "${name}"? Its ${count} item${count === 1 ? "" : "s"} will move to General.`
+        ? `Delete "${name}" and its ${count} menu item${count === 1 ? "" : "s"}? This cannot be undone.`
         : `Delete "${name}"?`;
     if (!confirm(warning)) return;
 
@@ -312,7 +312,12 @@ export default function MenuPage() {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       await Promise.all([loadCategories(), loadMenu()]);
-      setMessage(`Category "${name}" deleted.`);
+      const deleted = data.deletedItemCount ?? 0;
+      setMessage(
+        deleted > 0
+          ? `Category "${name}" and ${deleted} item${deleted === 1 ? "" : "s"} deleted.`
+          : `Category "${name}" deleted.`
+      );
     } else {
       setMessage(data.error ?? "Failed to delete category.");
     }

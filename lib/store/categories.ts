@@ -1,4 +1,4 @@
-import { getMenuItems, renameMenuItemsCategory } from "@/lib/store/menu";
+import { deleteMenuItemsByCategory, getMenuItems, renameMenuItemsCategory } from "@/lib/store/menu";
 import { loadPersisted, savePersisted } from "@/lib/store/persist";
 
 const globalStore = globalThis as unknown as { menuCategories: string[] };
@@ -83,33 +83,21 @@ export function renameCategory(
 }
 
 /**
- * Deletes a category. Any menu items still in it are moved to "General"
- * so they never become orphaned.
+ * Deletes a category and all menu items inside it.
+ * Returns the count of deleted items so the caller can show a confirmation.
  */
-export function deleteCategory(name: string): { error?: string } {
+export function deleteCategory(name: string): { error?: string; deletedItemCount?: number } {
   const existing = findCategory(name);
   if (!existing) return { error: "Category not found" };
 
-  const inUse = getMenuItems().some(
-    (item) => item.category.toLowerCase() === existing.toLowerCase()
-  );
-  if (inUse && existing.toLowerCase() === "general") {
-    return { error: `"General" can't be deleted while it has menu items` };
-  }
+  const deletedItemCount = deleteMenuItemsByCategory(existing);
 
   globalStore.menuCategories = globalStore.menuCategories.filter(
     (c) => c !== existing
   );
 
-  if (inUse) {
-    if (!findCategory("General")) {
-      globalStore.menuCategories.push("General");
-    }
-    renameMenuItemsCategory(existing, "General");
-  }
-
   persist();
-  return {};
+  return { deletedItemCount };
 }
 
 export function moveCategory(

@@ -31,8 +31,8 @@ export function validateOrderItems(
     if (!menuItem) {
       throw new Error(`Unknown menu item: ${input.menu_item_id}`);
     }
-    if (input.quantity < 1) {
-      throw new Error("Quantity must be at least 1");
+    if (!Number.isInteger(input.quantity) || input.quantity < 1) {
+      throw new Error("Quantity must be a positive whole number");
     }
 
     if (!isMenuItemOrderable(menuItem.availability)) {

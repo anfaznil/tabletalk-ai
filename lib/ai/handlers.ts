@@ -182,8 +182,8 @@ function modifyOrder(args: Record<string, unknown>): ToolResult {
       };
     }
 
-    const { items: validated, subtotal } = validateOrderItems(items, menuItems);
-    const { tax_total, total } = calculateOrderTotals(subtotal);
+    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
+    const { subtotal, tax_total, total } = calculateOrderTotals(rawSubtotal);
     const order_size = classifyOrderSize(subtotal);
     validateOrderForClosing(items, menuItems, order_size);
     const { ready_by, ready_by_display, total_minutes } = calculateReadyBy(
@@ -238,8 +238,8 @@ function quoteOrderTotal(args: Record<string, unknown>): ToolResult {
       return { success: false, message: "No items provided" };
     }
 
-    const { items: validated, subtotal } = validateOrderItems(items, menuItems);
-    const { total } = calculateOrderTotals(subtotal);
+    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
+    const { total } = calculateOrderTotals(rawSubtotal);
 
     const itemList = formatItemList(validated);
 
@@ -264,8 +264,8 @@ function quoteReadyTime(args: Record<string, unknown>): ToolResult {
       return { success: false, message: "No items provided" };
     }
 
-    const { subtotal } = validateOrderItems(items, menuItems);
-    const order_size = classifyOrderSize(subtotal);
+    const { subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
+    const order_size = classifyOrderSize(rawSubtotal);
     validateOrderForClosing(items, menuItems, order_size);
     const { ready_by_display, total_minutes, rush_applied } = calculateReadyBy(
       items,
@@ -315,8 +315,8 @@ function captureOrder(args: Record<string, unknown>): ToolResult {
       };
     }
 
-    const { items: validated, subtotal } = validateOrderItems(items, menuItems);
-    const { tax_total, total } = calculateOrderTotals(subtotal);
+    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
+    const { subtotal, tax_total, total } = calculateOrderTotals(rawSubtotal);
     const order_size = classifyOrderSize(subtotal);
     validateOrderForClosing(items, menuItems, order_size);
     const { ready_by, ready_by_display, total_minutes } = calculateReadyBy(
@@ -371,6 +371,13 @@ function captureLead(
     return {
       success: false,
       message: "Missing required fields: name, event date, guest count",
+    };
+  }
+
+  if (typeof guest_count !== "number" || guest_count < 1 || !Number.isInteger(guest_count)) {
+    return {
+      success: false,
+      message: "Guest count must be a positive whole number.",
     };
   }
 

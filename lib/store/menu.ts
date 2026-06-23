@@ -225,6 +225,19 @@ export function reorderMenuItemsInCategory(
   return {};
 }
 
+export function deleteMenuItemsByCategory(category: string): number {
+  const before = globalStore.menuItems.length;
+  globalStore.menuItems = globalStore.menuItems.filter(
+    (item) => item.category.toLowerCase() !== category.toLowerCase()
+  );
+  const deleted = before - globalStore.menuItems.length;
+  if (deleted > 0) {
+    ensureMenuItemDefaults();
+    persist();
+  }
+  return deleted;
+}
+
 export function deleteMenuItem(id: string): boolean {
   const index = globalStore.menuItems.findIndex((item) => item.id === id);
   if (index === -1) return false;

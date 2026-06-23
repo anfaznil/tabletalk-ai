@@ -77,6 +77,14 @@ export function validateOrderForClosing(
   orderSize: OrderSize,
   at: Date = new Date()
 ): void {
+  const dayKey = DAY_KEYS[at.getDay()];
+  const hoursStr = getHours()[dayKey];
+  if (!hoursStr || hoursStr.toLowerCase() === "closed") {
+    throw new ClosingValidationError(
+      "We're closed today — we're not taking orders."
+    );
+  }
+
   const lastOrder = getLastOrderDeadline(at);
   if (!lastOrder) return;
 
