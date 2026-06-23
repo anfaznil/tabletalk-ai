@@ -58,7 +58,7 @@ export function MenuItemRowActions({
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2" data-no-drag="true">
+    <div className="flex shrink-0 items-center gap-2" data-no-drag="true">
       <label className="sr-only" htmlFor={`availability-${item.id}`}>
         Availability for {item.name}
       </label>
@@ -102,7 +102,7 @@ export function MenuItemRowActions({
 
 export function MenuItemRowBody({ item }: { item: MenuItem }) {
   return (
-    <>
+    <div className="flex min-w-0 min-w-[180px] flex-1 items-start gap-3">
       <div
         aria-hidden
         className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-stone-400"
@@ -128,6 +128,6 @@ export function MenuItemRowBody({ item }: { item: MenuItem }) {
           <p className="mt-1 text-sm text-stone-400">{item.description}</p>
         )}
       </div>
-    </>
+    </div>
   );
 }

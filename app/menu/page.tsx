@@ -535,7 +535,7 @@ export default function MenuPage() {
         description="Edit items, prices, and prep times — the AI uses this live"
         action={
           !showForm ? (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -817,7 +817,7 @@ export default function MenuPage() {
                 categoryListRefs.current[category] = element;
               }}
               data-menu-list={category}
-              className="divide-y divide-stone-100"
+              className="divide-y divide-stone-100 overflow-x-auto"
             >
               {(dragSession?.category.toLowerCase() === category.toLowerCase()
                 ? buildDragDisplay(

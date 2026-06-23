@@ -12,7 +12,7 @@ export function DashboardLayout({
   fullHeight?: boolean;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen min-w-[640px] overflow-y-hidden">
       <Sidebar />
       <main
         className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-white ${

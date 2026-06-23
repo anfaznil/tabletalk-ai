@@ -24,7 +24,7 @@ export function MenuItemDragGhost({
 
   return createPortal(
     <div
-      className="pointer-events-none fixed left-0 top-0 z-50 flex items-start gap-3 rounded-lg border border-stone-200 bg-white px-2 py-4 shadow-lg"
+      className="pointer-events-none fixed left-0 top-0 z-50 flex flex-wrap items-start gap-3 rounded-lg border border-stone-200 bg-white px-2 py-4 shadow-lg"
       style={{
         width,
         transform: `translate3d(${x}px, ${y}px, 0)`,
