@@ -1,18 +1,17 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { buildRestaurantContext } from "@/lib/ai/context";
 import { buildSystemPrompt } from "@/lib/ai/prompts";
 import { aiTools } from "@/lib/ai/tools";
 import { handleToolCall } from "@/lib/ai/handlers";
 import type { ChatMessage } from "@/types";
 
-function isFunctionToolCall(
-  toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall
-): toolCall is OpenAI.Chat.Completions.ChatCompletionMessageToolCall & {
-  function: { name: string; arguments: string };
-} {
-  return "function" in toolCall && toolCall.type === "function";
-}
+// Convert OpenAI-style tool definitions to Anthropic's input_schema format.
+const anthropicTools: Anthropic.Tool[] = aiTools.map((t) => ({
+  name: t.function.name,
+  description: t.function.description,
+  input_schema: t.function.parameters as Anthropic.Tool["input_schema"],
+}));
 
 export async function POST(request: Request) {
   try {
@@ -22,83 +21,94 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Messages required" }, { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey || apiKey.includes("your_openai") || apiKey.includes("your-key")) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey || apiKey.startsWith("your")) {
       return NextResponse.json(
         {
           error:
-            "OpenAI API key not configured. Add a valid OPENAI_API_KEY to .env.local and restart the dev server.",
+            "Anthropic API key not configured. Add a valid ANTHROPIC_API_KEY to .env.local and restart the dev server.",
         },
         { status: 503 }
       );
     }
 
-    const openai = new OpenAI({ apiKey });
+    const client = new Anthropic({ apiKey });
     const context = buildRestaurantContext();
     const systemPrompt = buildSystemPrompt(context);
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
-      ],
-      tools: aiTools,
-      tool_choice: "auto",
-    });
+    // Build the initial message list in Anthropic format.
+    let anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
 
-    const choice = completion.choices[0];
-    let content = choice.message.content ?? "";
-
-    if (choice.message.tool_calls?.length) {
-      const toolMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        { role: "system", content: systemPrompt },
-        ...messages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
-        choice.message,
-      ];
-
-      for (const toolCall of choice.message.tool_calls) {
-        if (!isFunctionToolCall(toolCall)) continue;
-
-        const args = JSON.parse(toolCall.function.arguments);
-        const result = handleToolCall(toolCall.function.name, args);
-
-        toolMessages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: result.message,
-        });
-      }
-
-      const followUp = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: toolMessages,
+    // Agentic loop — keep running until the model returns end_turn (no more tool calls).
+    let finalText = "";
+    for (;;) {
+      const response = await client.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        system: systemPrompt,
+        messages: anthropicMessages,
+        tools: anthropicTools,
+        max_tokens: 1024,
       });
 
-      content =
-        followUp.choices[0]?.message?.content ?? "Got it.";
+      // Collect any text content from this turn.
+      const textBlocks = response.content.filter(
+        (b): b is Anthropic.TextBlock => b.type === "text"
+      );
+      if (textBlocks.length) {
+        finalText = textBlocks.map((b) => b.text).join("");
+      }
+
+      if (response.stop_reason !== "tool_use") break;
+
+      // Execute every tool call in this response.
+      const toolUseBlocks = response.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+      );
+
+      // Append the assistant turn (which includes tool_use blocks).
+      anthropicMessages = [
+        ...anthropicMessages,
+        { role: "assistant", content: response.content },
+      ];
+
+      // Build a single user message with all tool results.
+      const toolResults: Anthropic.ToolResultBlockParam[] = toolUseBlocks.map(
+        (block) => {
+          const result = handleToolCall(
+            block.name,
+            block.input as Record<string, unknown>
+          );
+          return {
+            type: "tool_result" as const,
+            tool_use_id: block.id,
+            content: result.message,
+          };
+        }
+      );
+
+      anthropicMessages = [
+        ...anthropicMessages,
+        { role: "user", content: toolResults },
+      ];
     }
 
-    if (!content) {
-      content = "What can I get for you?";
+    if (!finalText) {
+      finalText = "What can I get for you?";
     }
 
-    return NextResponse.json({ content });
+    return NextResponse.json({ content: finalText });
   } catch (err) {
     console.error("Chat API error:", err);
 
-    if (err instanceof OpenAI.APIError) {
+    if (err instanceof Anthropic.APIError) {
       if (err.status === 401) {
         return NextResponse.json(
           {
             error:
-              "Invalid OpenAI API key. Update OPENAI_API_KEY in .env.local with a real key from platform.openai.com, then restart the dev server.",
+              "Invalid Anthropic API key. Update ANTHROPIC_API_KEY in .env.local with a real key from console.anthropic.com, then restart the dev server.",
           },
           { status: 401 }
         );
@@ -107,13 +117,13 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              "OpenAI quota exceeded. Add a payment method or credits at platform.openai.com/account/billing, then try again.",
+              "Anthropic rate limit hit. Check your plan at console.anthropic.com and try again.",
           },
           { status: 429 }
         );
       }
       return NextResponse.json(
-        { error: err.message || "OpenAI request failed." },
+        { error: err.message || "Anthropic request failed." },
         { status: err.status ?? 500 }
       );
     }
