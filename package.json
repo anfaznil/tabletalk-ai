@@ -3,27 +3,32 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "dev:clean": "node scripts/clean-dev.mjs && next dev --turbopack",
+    "dev": "ts-node --project tsconfig.server.json server.ts",
+    "dev:next": "next dev --turbopack",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production ts-node --project tsconfig.server.json server.ts",
     "lint": "next lint"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "next": "^15.3.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "twilio": "^6.1.1",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.8",
     "@types/node": "^22.15.29",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.28.0",
     "eslint-config-next": "^15.3.3",
     "playwright": "^1.61.1",
     "tailwindcss": "^4.1.8",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.8.3"
   }
 }
