@@ -17,6 +17,11 @@ import { addLead, type LeadType } from "@/lib/store/leads";
 import { getStoreInfo } from "@/lib/store/info";
 import { getMenuItems } from "@/lib/store/menu";
 import {
+  notifyOrderPlaced,
+  notifyLeadCaptured,
+  notifyCustomerOrderConfirmed,
+} from "@/lib/notifications/sms";
+import {
   addOrder,
   findOrdersByCustomerName,
   getOrderById,
@@ -337,6 +342,10 @@ function captureOrder(args: Record<string, unknown>): ToolResult {
       notes: (args.notes as string) ?? null,
     });
 
+    // Fire-and-forget — SMS failures must never block the order response.
+    void notifyOrderPlaced(order);
+    void notifyCustomerOrderConfirmed(order);
+
     const itemList = formatItemList(validated);
 
     const wait = formatWaitMinutes(total_minutes);
@@ -381,7 +390,7 @@ function captureLead(
     };
   }
 
-  addLead({
+  const lead = addLead({
     lead_type,
     customer_name,
     phone,
@@ -389,6 +398,8 @@ function captureLead(
     guest_count,
     notes: (args.notes as string) ?? null,
   });
+
+  void notifyLeadCaptured(lead);
 
   const label = lead_type === "catering" ? "Catering" : "Large order";
   return {
