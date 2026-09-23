@@ -36,5 +36,6 @@ export const config = {
     "/api/faqs/:path*",
     "/api/orders/:path*",
     "/api/leads",
+    "/api/voice/settings",
   ],
 };

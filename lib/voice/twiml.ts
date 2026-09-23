@@ -3,13 +3,18 @@
  * Enough to generate the XML Twilio needs for ConversationRelay and <Dial>.
  */
 
-export function buildConversationRelayTwiml(wsUrl: string, callSid: string): string {
+export function buildConversationRelayTwiml(
+  wsUrl: string,
+  callSid: string,
+  greeting = "Hi, this is the restaurant."
+): string {
+  const escapedGreeting = greeting.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
   // Recording disclosure injected as a <Say> before <Connect> so it plays once.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">This call may be recorded for quality and training purposes.</Say>
   <Connect>
-    <ConversationRelay url="${wsUrl}" callSid="${callSid}" welcomeGreeting="Hi, this is Deen&apos;s Bistro." ttsProvider="google" voice="en-US-Neural2-F" dtmfDetection="true" interruptByDtmf="true" />
+    <ConversationRelay url="${wsUrl}" callSid="${callSid}" welcomeGreeting="${escapedGreeting}" ttsProvider="google" voice="en-US-Neural2-F" dtmfDetection="true" interruptByDtmf="true" />
   </Connect>
 </Response>`;
 }

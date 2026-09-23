@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { getStoreInfo, updateStoreInfo } from "@/lib/store/info";
 
 export async function GET() {
-  return NextResponse.json(getStoreInfo());
+  return NextResponse.json({
+    ...getStoreInfo(),
+    // Expose the Twilio number so the settings UI can show forwarding instructions.
+    twilio_number: process.env.TWILIO_PHONE_NUMBER ?? null,
+  });
 }
 
 export async function PATCH(request: Request) {
