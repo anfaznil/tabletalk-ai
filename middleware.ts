@@ -37,5 +37,7 @@ export const config = {
     "/api/orders/:path*",
     "/api/leads",
     "/api/voice/settings",
+    "/api/call-logs",
+    "/calls/:path*",
   ],
 };
