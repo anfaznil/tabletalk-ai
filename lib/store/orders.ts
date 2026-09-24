@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { getRestaurantId } from "@/lib/store/tenant";
+import { emit as emitOrder } from "@/lib/kitchen/event-bus";
 
 export type {
   Order,
@@ -112,7 +113,9 @@ export async function addOrder(
     },
     include: ORDER_INCLUDE,
   });
-  return toOrder(created as unknown as PrismaOrder);
+  const order = toOrder(created as unknown as PrismaOrder);
+  emitOrder(rid, order);
+  return order;
 }
 
 export async function getOrders(): Promise<Order[]> {
@@ -237,3 +240,22 @@ export async function completeOrder(id: string): Promise<Order | null> {
   });
   return toOrder(updated as unknown as PrismaOrder);
 }
+
+export async function setOrderStatus(
+  id: string,
+  status: "completed" | "cancelled"
+): Promise<Order | null> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.order.findFirst({ where: { id, restaurant_id: rid } });
+  if (!existing) return null;
+  const updated = await prisma.order.update({
+    where: { id },
+    data: {
+      status,
+      ...(status === "completed" ? { completed_at: new Date() } : {}),
+    },
+    include: ORDER_INCLUDE,
+  });
+  return toOrder(updated as unknown as PrismaOrder);
+}
+

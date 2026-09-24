@@ -45,5 +45,7 @@ export const config = {
     "/settings/billing",
     "/api/billing/checkout",
     "/api/billing/portal",
+    "/kitchen",
+    "/api/orders/stream",
   ],
 };
