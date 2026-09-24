@@ -7,6 +7,8 @@ export { SESSION_COOKIE };
 
 export interface SessionData {
   username: string;
+  restaurant_id: string;
+  restaurantSlug: string;
 }
 
 function getSecret(): string {
@@ -54,9 +56,9 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-export async function createSessionToken(username: string): Promise<string> {
+export async function createSessionToken(data: SessionData): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SEC;
-  const payload = JSON.stringify({ username, exp });
+  const payload = JSON.stringify({ ...data, exp });
   const payloadB64 = toBase64Url(new TextEncoder().encode(payload));
   const signature = await signPayload(payloadB64);
   return `${payloadB64}.${signature}`;
@@ -74,12 +76,14 @@ export async function verifySessionToken(
   try {
     const payload = JSON.parse(fromBase64Url(payloadB64)) as {
       username: string;
+      restaurant_id: string;
+      restaurantSlug: string;
       exp: number;
     };
-    if (!payload.username || payload.exp < Math.floor(Date.now() / 1000)) {
+    if (!payload.username || !payload.restaurant_id || payload.exp < Math.floor(Date.now() / 1000)) {
       return null;
     }
-    return { username: payload.username };
+    return { username: payload.username, restaurant_id: payload.restaurant_id, restaurantSlug: payload.restaurantSlug };
   } catch {
     return null;
   }

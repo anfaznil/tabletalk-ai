@@ -104,6 +104,13 @@ export function LoginForm() {
                 {loading ? "Signing in…" : "Log in"}
               </button>
             </form>
+
+            <p className="mt-6 text-center text-xs text-stone-500">
+              No account?{" "}
+              <a href="/signup" className="font-medium text-teal-600 hover:underline">
+                Start free trial
+              </a>
+            </p>
           </div>
         </main>
       </div>

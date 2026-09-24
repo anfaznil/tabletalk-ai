@@ -1,12 +1,32 @@
-import { TEST_ACCOUNT_USERNAME } from "@/lib/auth/constants";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/db/prisma";
 
-export function verifyCredentials(
+export interface VerifiedUser {
+  restaurant_id: string;
+  restaurantSlug: string;
+  username: string;
+}
+
+export async function verifyCredentials(
   username: string,
   password: string
-): boolean {
-  const expectedUsername =
-    process.env.AUTH_USERNAME ?? TEST_ACCOUNT_USERNAME;
-  const expectedPassword = process.env.AUTH_PASSWORD ?? "F@nzy123";
+): Promise<VerifiedUser | null> {
+  const user = await prisma.user.findUnique({
+    where: { username },
+    include: { restaurant: { select: { id: true, slug: true } } },
+  });
+  if (!user) return null;
 
-  return username === expectedUsername && password === expectedPassword;
+  const ok = await bcrypt.compare(password, user.password_hash);
+  if (!ok) return null;
+
+  return {
+    restaurant_id: user.restaurant.id,
+    restaurantSlug: user.restaurant.slug,
+    username: user.username,
+  };
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
 }

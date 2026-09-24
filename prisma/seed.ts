@@ -7,14 +7,12 @@
 
 import { PrismaClient } from "@prisma/client";
 import { deensBistro } from "../lib/data/deens-bistro";
-import { createHash } from "crypto";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-// Simple deterministic password hash for the seed owner account.
-// Replace with bcrypt in production auth flow.
-function hashPassword(password: string): string {
-  return createHash("sha256").update(password).digest("hex");
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
 }
 
 async function main() {
@@ -39,7 +37,7 @@ async function main() {
       users: {
         create: {
           username: "admin",
-          password_hash: hashPassword("admin"),
+          password_hash: await hashPassword("admin"),
         },
       },
 
