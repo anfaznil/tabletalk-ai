@@ -42,5 +42,8 @@ export const config = {
     "/api/call-logs",
     "/calls/:path*",
     "/onboarding",
+    "/settings/billing",
+    "/api/billing/checkout",
+    "/api/billing/portal",
   ],
 };
