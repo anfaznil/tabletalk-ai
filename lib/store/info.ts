@@ -1,5 +1,5 @@
-import { deensBistro } from "@/lib/data/deens-bistro";
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
 
 export interface StoreInfo {
   name: string;
@@ -7,42 +7,53 @@ export interface StoreInfo {
   address: string;
   website: string;
   catering_available: boolean;
-  /** Logo stored as a data URL (small images only) or null when unset. */
   logo_data_url: string | null;
 }
 
-/** ~1.5MB of base64 ≈ 1MB image — plenty for a logo. */
 const MAX_LOGO_LENGTH = 1_500_000;
 
-function seedInfo(): StoreInfo {
+function toInfo(row: {
+  name: string;
+  phone: string | null;
+  address: string | null;
+  website: string | null;
+  catering_available: boolean;
+  logo_data_url: string | null;
+}): StoreInfo {
   return {
-    name: deensBistro.name,
-    phone: deensBistro.phone,
-    address: deensBistro.address,
-    website: deensBistro.website,
-    catering_available: deensBistro.catering_available,
-    logo_data_url: null,
+    name: row.name,
+    phone: row.phone ?? "",
+    address: row.address ?? "",
+    website: row.website ?? "",
+    catering_available: row.catering_available,
+    logo_data_url: row.logo_data_url,
   };
 }
 
-const globalStore = globalThis as unknown as { storeInfo: StoreInfo };
-
-if (!globalStore.storeInfo) {
-  // Merge over seed defaults so older persisted files pick up new fields.
-  globalStore.storeInfo = { ...seedInfo(), ...loadPersisted("storeInfo", seedInfo) };
+export async function getStoreInfo(): Promise<StoreInfo> {
+  const rid = await getRestaurantId();
+  const row = await prisma.restaurant.findUniqueOrThrow({
+    where: { id: rid },
+    select: {
+      name: true,
+      phone: true,
+      address: true,
+      website: true,
+      catering_available: true,
+      logo_data_url: true,
+    },
+  });
+  return toInfo(row);
 }
 
-export function getStoreInfo(): StoreInfo {
-  return globalStore.storeInfo;
-}
-
-export function updateStoreInfo(updates: Partial<StoreInfo>): {
+export async function updateStoreInfo(updates: Partial<StoreInfo>): Promise<{
   info: StoreInfo;
   errors: Record<string, string>;
-} {
+}> {
+  const rid = await getRestaurantId();
+  const current = await getStoreInfo();
   const errors: Record<string, string> = {};
-
-  const next = { ...globalStore.storeInfo };
+  const next = { ...current };
 
   if (updates.name !== undefined) {
     const name = updates.name.trim();
@@ -68,9 +79,18 @@ export function updateStoreInfo(updates: Partial<StoreInfo>): {
   }
 
   if (Object.keys(errors).length === 0) {
-    globalStore.storeInfo = next;
-    savePersisted("storeInfo", globalStore.storeInfo);
+    await prisma.restaurant.update({
+      where: { id: rid },
+      data: {
+        name: next.name,
+        phone: next.phone || null,
+        address: next.address || null,
+        website: next.website || null,
+        catering_available: next.catering_available,
+        logo_data_url: next.logo_data_url,
+      },
+    });
   }
 
-  return { info: globalStore.storeInfo, errors };
+  return { info: Object.keys(errors).length === 0 ? next : current, errors };
 }

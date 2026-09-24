@@ -56,7 +56,7 @@ async function getAiReply(
 
   session.messages.push({ role: "user", content: userText });
 
-  const context = buildRestaurantContext();
+  const context = await buildRestaurantContext();
   const basePrompt = buildSystemPrompt(context);
   const systemPrompt = transferFailed
     ? basePrompt +
@@ -90,20 +90,22 @@ async function getAiReply(
 
     messages = [...messages, { role: "assistant", content: response.content }];
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = toolUseBlocks.map((block) => {
-      if (block.name === "transfer_to_staff") {
-        if (TRANSFER_NUMBER) transferTo = TRANSFER_NUMBER;
-        return {
-          type: "tool_result" as const,
-          tool_use_id: block.id,
-          content: TRANSFER_NUMBER
-            ? JSON.stringify({ success: true, message: "Transferring to staff now." })
-            : JSON.stringify({ success: false, message: "No transfer number is configured." }),
-        };
-      }
-      const result = handleToolCall(block.name, block.input as Record<string, unknown>);
-      return { type: "tool_result" as const, tool_use_id: block.id, content: result.message };
-    });
+    const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+      toolUseBlocks.map(async (block) => {
+        if (block.name === "transfer_to_staff") {
+          if (TRANSFER_NUMBER) transferTo = TRANSFER_NUMBER;
+          return {
+            type: "tool_result" as const,
+            tool_use_id: block.id,
+            content: TRANSFER_NUMBER
+              ? JSON.stringify({ success: true, message: "Transferring to staff now." })
+              : JSON.stringify({ success: false, message: "No transfer number is configured." }),
+          };
+        }
+        const result = await handleToolCall(block.name, block.input as Record<string, unknown>);
+        return { type: "tool_result" as const, tool_use_id: block.id, content: result.message };
+      })
+    );
 
     messages = [...messages, { role: "user", content: toolResults }];
   }
@@ -153,7 +155,7 @@ export function handleRelayConnection(ws: WebSocket, url: URL): void {
       // Run the AI agentic loop.
       const result = await (async () => {
         if (!getSession(callSid)) return { reply: "Sorry, something went wrong.", transferTo: undefined };
-        const context = buildRestaurantContext();
+        const context = await buildRestaurantContext();
         const basePrompt = buildSystemPrompt(context);
         const systemPrompt = failed
           ? basePrompt + "\n\nNOTE: A transfer was attempted but staff didn't answer. Acknowledge naturally and continue helping. Offer to take a message."
@@ -183,20 +185,22 @@ export function handleRelayConnection(ws: WebSocket, url: URL): void {
           const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
           messages = [...messages, { role: "assistant", content: response.content }];
 
-          const toolResults: Anthropic.ToolResultBlockParam[] = toolUseBlocks.map((block) => {
-            if (block.name === "transfer_to_staff") {
-              if (TRANSFER_NUMBER) transferTo = TRANSFER_NUMBER;
-              return {
-                type: "tool_result" as const,
-                tool_use_id: block.id,
-                content: TRANSFER_NUMBER
-                  ? JSON.stringify({ success: true, message: "Transferring to staff." })
-                  : JSON.stringify({ success: false, message: "No transfer number configured." }),
-              };
-            }
-            const result = handleToolCall(block.name, block.input as Record<string, unknown>);
-            return { type: "tool_result" as const, tool_use_id: block.id, content: result.message };
-          });
+          const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+            toolUseBlocks.map(async (block) => {
+              if (block.name === "transfer_to_staff") {
+                if (TRANSFER_NUMBER) transferTo = TRANSFER_NUMBER;
+                return {
+                  type: "tool_result" as const,
+                  tool_use_id: block.id,
+                  content: TRANSFER_NUMBER
+                    ? JSON.stringify({ success: true, message: "Transferring to staff." })
+                    : JSON.stringify({ success: false, message: "No transfer number configured." }),
+                };
+              }
+              const result = await handleToolCall(block.name, block.input as Record<string, unknown>);
+              return { type: "tool_result" as const, tool_use_id: block.id, content: result.message };
+            })
+          );
 
           messages = [...messages, { role: "user", content: toolResults }];
         }

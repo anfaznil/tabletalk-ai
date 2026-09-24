@@ -1,9 +1,5 @@
-/**
- * Call log store — one entry per completed Twilio call.
- * Stored in the same JSON persistence layer as orders/leads.
- */
-
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
 import type { ForwardingMode } from "@/lib/store/voice";
 
 export interface CallLogEntry {
@@ -13,45 +9,89 @@ export interface CallLogEntry {
   mode: ForwardingMode | "unknown";
   status: "completed" | "no-answer" | "busy" | "failed" | "in-progress";
   duration_seconds: number;
-  /** UTC ISO timestamp of when the call started. */
   started_at: string;
-  /** UTC ISO timestamp of when the call ended. */
   ended_at: string | null;
-  /** Transcript: alternating user/assistant messages from the session. */
   transcript: { role: "user" | "assistant"; content: string }[];
-  /** True if a staff transfer was attempted. */
   transfer_attempted: boolean;
-  /** True if the transfer was answered. */
   transfer_answered: boolean;
-  /** Recording URL from Twilio (populated when available). */
   recording_url: string | null;
 }
 
-const globalStore = globalThis as unknown as { callLogs: CallLogEntry[] };
-
-if (!globalStore.callLogs) {
-  globalStore.callLogs = loadPersisted("callLogs", () => []);
+function toEntry(row: {
+  id: string;
+  call_sid: string;
+  caller_number: string | null;
+  mode: string;
+  status: string;
+  duration_seconds: number;
+  started_at: Date;
+  ended_at: Date | null;
+  transcript: unknown;
+  transfer_attempted: boolean;
+  transfer_answered: boolean;
+  recording_url: string | null;
+}): CallLogEntry {
+  return {
+    id: row.id,
+    call_sid: row.call_sid,
+    caller_number: row.caller_number,
+    mode: row.mode as CallLogEntry["mode"],
+    status: row.status as CallLogEntry["status"],
+    duration_seconds: row.duration_seconds,
+    started_at: row.started_at.toISOString(),
+    ended_at: row.ended_at?.toISOString() ?? null,
+    transcript: (row.transcript as CallLogEntry["transcript"]) ?? [],
+    transfer_attempted: row.transfer_attempted,
+    transfer_answered: row.transfer_answered,
+    recording_url: row.recording_url,
+  };
 }
 
-function persist() {
-  savePersisted("callLogs", globalStore.callLogs);
+export async function addCallLog(entry: Omit<CallLogEntry, "id">): Promise<CallLogEntry> {
+  const rid = await getRestaurantId();
+
+  // Upsert so that duplicate callSid from Twilio retries doesn't throw.
+  const row = await prisma.callLog.upsert({
+    where: { call_sid: entry.call_sid },
+    create: {
+      restaurant_id: rid,
+      call_sid: entry.call_sid,
+      caller_number: entry.caller_number,
+      mode: entry.mode,
+      status: entry.status,
+      duration_seconds: entry.duration_seconds,
+      started_at: new Date(entry.started_at),
+      ended_at: entry.ended_at ? new Date(entry.ended_at) : null,
+      transcript: entry.transcript,
+      transfer_attempted: entry.transfer_attempted,
+      transfer_answered: entry.transfer_answered,
+      recording_url: entry.recording_url,
+    },
+    update: {
+      status: entry.status,
+      duration_seconds: entry.duration_seconds,
+      ended_at: entry.ended_at ? new Date(entry.ended_at) : null,
+      transcript: entry.transcript,
+      transfer_attempted: entry.transfer_attempted,
+      transfer_answered: entry.transfer_answered,
+      recording_url: entry.recording_url,
+    },
+  });
+  return toEntry(row);
 }
 
-export function addCallLog(entry: Omit<CallLogEntry, "id">): CallLogEntry {
-  const log: CallLogEntry = { ...entry, id: crypto.randomUUID() };
-  globalStore.callLogs.unshift(log);
-  // Keep the most recent 500 calls.
-  if (globalStore.callLogs.length > 500) {
-    globalStore.callLogs = globalStore.callLogs.slice(0, 500);
-  }
-  persist();
-  return log;
+export async function getCallLogs(limit = 50): Promise<CallLogEntry[]> {
+  const rid = await getRestaurantId();
+  const rows = await prisma.callLog.findMany({
+    where: { restaurant_id: rid },
+    orderBy: { started_at: "desc" },
+    take: Math.min(limit, 200),
+  });
+  return rows.map(toEntry);
 }
 
-export function getCallLogs(limit = 50): CallLogEntry[] {
-  return globalStore.callLogs.slice(0, limit);
-}
-
-export function getCallLogByCallSid(callSid: string): CallLogEntry | undefined {
-  return globalStore.callLogs.find((l) => l.call_sid === callSid);
+export async function getCallLogByCallSid(callSid: string): Promise<CallLogEntry | undefined> {
+  const rid = await getRestaurantId();
+  const row = await prisma.callLog.findFirst({ where: { call_sid: callSid, restaurant_id: rid } });
+  return row ? toEntry(row) : undefined;
 }

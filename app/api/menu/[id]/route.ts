@@ -19,7 +19,7 @@ export async function PATCH(
     }
   }
 
-  const updated = updateMenuItem(id, body);
+  const updated = await updateMenuItem(id, body);
   if (!updated) {
     return NextResponse.json({ error: "Menu item not found" }, { status: 404 });
   }
@@ -32,7 +32,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deleted = deleteMenuItem(id);
+  const deleted = await deleteMenuItem(id);
 
   if (!deleted) {
     return NextResponse.json({ error: "Menu item not found" }, { status: 404 });

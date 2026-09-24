@@ -4,8 +4,8 @@ import { getStoreInfo } from "@/lib/store/info";
 
 export const dynamic = "force-dynamic";
 
-export default function ChatPage() {
-  const info = getStoreInfo();
+export default async function ChatPage() {
+  const info = await getStoreInfo();
 
   return (
     <DashboardLayout fullHeight>

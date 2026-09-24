@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { addFaq, getFaqs, updateFaq } from "@/lib/store/faqs";
 
 export async function GET() {
-  return NextResponse.json(getFaqs());
+  return NextResponse.json(await getFaqs());
 }
 
 export async function POST(request: Request) {
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const faq = addFaq({ question: question.trim(), answer: answer.trim() });
+  const faq = await addFaq({ question: question.trim(), answer: answer.trim() });
   return NextResponse.json(faq, { status: 201 });
 }
 
@@ -32,7 +32,7 @@ export async function PATCH(request: Request) {
   if (question !== undefined) updates.question = String(question).trim();
   if (answer !== undefined) updates.answer = String(answer).trim();
 
-  const updated = updateFaq(id, updates);
+  const updated = await updateFaq(id, updates);
   if (!updated) {
     return NextResponse.json({ error: "FAQ not found" }, { status: 404 });
   }

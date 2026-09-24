@@ -1,123 +1,114 @@
-import { deleteMenuItemsByCategory, getMenuItems, renameMenuItemsCategory } from "@/lib/store/menu";
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
+import { deleteMenuItemsByCategory, renameMenuItemsCategory } from "@/lib/store/menu";
 
-const globalStore = globalThis as unknown as { menuCategories: string[] };
-
-function seedCategories(): string[] {
-  const seen = new Set<string>();
-  const categories: string[] = [];
-  for (const item of getMenuItems()) {
-    const category = item.category?.trim();
-    if (category && !seen.has(category.toLowerCase())) {
-      seen.add(category.toLowerCase());
-      categories.push(category);
-    }
-  }
-  return categories;
+export async function getCategories(): Promise<string[]> {
+  const rid = await getRestaurantId();
+  const rows = await prisma.menuCategory.findMany({
+    where: { restaurant_id: rid },
+    orderBy: { position: "asc" },
+  });
+  return rows.map((r) => r.name);
 }
 
-if (!globalStore.menuCategories) {
-  globalStore.menuCategories = loadPersisted("menuCategories", seedCategories);
-}
-
-function persist() {
-  savePersisted("menuCategories", globalStore.menuCategories);
-}
-
-export function getCategories(): string[] {
-  return globalStore.menuCategories;
-}
-
-function findCategory(name: string): string | undefined {
-  return globalStore.menuCategories.find(
-    (c) => c.toLowerCase() === name.trim().toLowerCase()
-  );
-}
-
-export function addCategory(name: string): {
-  category?: string;
-  error?: string;
-} {
+export async function addCategory(name: string): Promise<{ category?: string; error?: string }> {
   const trimmed = name.trim();
   if (!trimmed) return { error: "Category name is required" };
 
-  const existing = findCategory(trimmed);
-  if (existing) return { error: `"${existing}" already exists` };
+  const rid = await getRestaurantId();
+  const existing = await prisma.menuCategory.findFirst({
+    where: { restaurant_id: rid, name: { equals: trimmed, mode: "insensitive" } },
+  });
+  if (existing) return { error: `"${existing.name}" already exists` };
 
-  globalStore.menuCategories.push(trimmed);
-  persist();
+  const agg = await prisma.menuCategory.aggregate({
+    where: { restaurant_id: rid },
+    _max: { position: true },
+  });
+  await prisma.menuCategory.create({
+    data: { restaurant_id: rid, name: trimmed, position: (agg._max.position ?? -1) + 1 },
+  });
   return { category: trimmed };
 }
 
-/** Adds the category if it isn't known yet (used when saving menu items). */
-export function ensureCategory(name: string): void {
+export async function ensureCategory(name: string): Promise<void> {
   const trimmed = name.trim();
-  if (!trimmed || findCategory(trimmed)) return;
-  globalStore.menuCategories.push(trimmed);
-  persist();
+  if (!trimmed) return;
+  const rid = await getRestaurantId();
+  const existing = await prisma.menuCategory.findFirst({
+    where: { restaurant_id: rid, name: { equals: trimmed, mode: "insensitive" } },
+  });
+  if (existing) return;
+  const agg = await prisma.menuCategory.aggregate({
+    where: { restaurant_id: rid },
+    _max: { position: true },
+  });
+  await prisma.menuCategory.create({
+    data: { restaurant_id: rid, name: trimmed, position: (agg._max.position ?? -1) + 1 },
+  });
 }
 
-/** Renames a category and moves all menu items in it to the new name. */
-export function renameCategory(
+export async function renameCategory(
   from: string,
   to: string
-): { category?: string; error?: string } {
-  const existing = findCategory(from);
+): Promise<{ category?: string; error?: string }> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.menuCategory.findFirst({
+    where: { restaurant_id: rid, name: { equals: from, mode: "insensitive" } },
+  });
   if (!existing) return { error: "Category not found" };
 
   const trimmed = to.trim();
   if (!trimmed) return { error: "Category name is required" };
-  if (trimmed === existing) return { category: existing };
+  if (trimmed.toLowerCase() === existing.name.toLowerCase()) return { category: existing.name };
 
-  const clash = findCategory(trimmed);
-  if (clash && clash !== existing) {
-    return { error: `"${clash}" already exists` };
-  }
+  const clash = await prisma.menuCategory.findFirst({
+    where: { restaurant_id: rid, name: { equals: trimmed, mode: "insensitive" } },
+  });
+  if (clash && clash.id !== existing.id) return { error: `"${clash.name}" already exists` };
 
-  globalStore.menuCategories = globalStore.menuCategories.map((c) =>
-    c === existing ? trimmed : c
-  );
-  persist();
-  renameMenuItemsCategory(existing, trimmed);
+  await prisma.menuCategory.update({ where: { id: existing.id }, data: { name: trimmed } });
+  await renameMenuItemsCategory(existing.name, trimmed);
   return { category: trimmed };
 }
 
-/**
- * Deletes a category and all menu items inside it.
- * Returns the count of deleted items so the caller can show a confirmation.
- */
-export function deleteCategory(name: string): { error?: string; deletedItemCount?: number } {
-  const existing = findCategory(name);
+export async function deleteCategory(
+  name: string
+): Promise<{ error?: string; deletedItemCount?: number }> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.menuCategory.findFirst({
+    where: { restaurant_id: rid, name: { equals: name, mode: "insensitive" } },
+  });
   if (!existing) return { error: "Category not found" };
 
-  const deletedItemCount = deleteMenuItemsByCategory(existing);
-
-  globalStore.menuCategories = globalStore.menuCategories.filter(
-    (c) => c !== existing
-  );
-
-  persist();
+  const deletedItemCount = await deleteMenuItemsByCategory(existing.name);
+  await prisma.menuCategory.delete({ where: { id: existing.id } });
   return { deletedItemCount };
 }
 
-export function moveCategory(
+export async function moveCategory(
   name: string,
   direction: "up" | "down"
-): { categories?: string[]; error?: string } {
-  const existing = findCategory(name);
-  if (!existing) return { error: "Category not found" };
+): Promise<{ categories?: string[]; error?: string }> {
+  const rid = await getRestaurantId();
+  const all = await prisma.menuCategory.findMany({
+    where: { restaurant_id: rid },
+    orderBy: { position: "asc" },
+  });
 
-  const index = globalStore.menuCategories.indexOf(existing);
+  const index = all.findIndex((c) => c.name.toLowerCase() === name.trim().toLowerCase());
   if (index === -1) return { error: "Category not found" };
 
   const targetIndex = direction === "up" ? index - 1 : index + 1;
-  if (targetIndex < 0 || targetIndex >= globalStore.menuCategories.length) {
+  if (targetIndex < 0 || targetIndex >= all.length) {
     return { error: "Can't move category further" };
   }
 
-  const next = [...globalStore.menuCategories];
-  [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-  globalStore.menuCategories = next;
-  persist();
-  return { categories: globalStore.menuCategories };
+  await prisma.$transaction([
+    prisma.menuCategory.update({ where: { id: all[index].id }, data: { position: targetIndex } }),
+    prisma.menuCategory.update({ where: { id: all[targetIndex].id }, data: { position: index } }),
+  ]);
+
+  const updated = await getCategories();
+  return { categories: updated };
 }

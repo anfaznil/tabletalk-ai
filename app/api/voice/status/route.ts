@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   const session = getSession(callSid);
 
   if (callSid) {
-    addCallLog({
+    void addCallLog({
       call_sid: callSid,
       caller_number: session?.callerNumber ?? null,
       mode: session?.mode ?? "unknown",

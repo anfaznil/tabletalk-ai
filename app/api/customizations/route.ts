@@ -6,7 +6,7 @@ import {
 } from "@/lib/store/customizations";
 
 export async function GET() {
-  return NextResponse.json(getCustomizations());
+  return NextResponse.json(await getCustomizations());
 }
 
 export async function POST(request: Request) {
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  const customization = addCustomization({
+  const customization = await addCustomization({
     name,
     description: description ?? "",
     price_modifier: Number(price_modifier) || 0,
@@ -39,12 +39,9 @@ export async function PATCH(request: Request) {
     updates.price_modifier = Number(updates.price_modifier) || 0;
   }
 
-  const updated = updateCustomization(id, updates);
+  const updated = await updateCustomization(id, updates);
   if (!updated) {
-    return NextResponse.json(
-      { error: "Customization not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Customization not found" }, { status: 404 });
   }
 
   return NextResponse.json(updated);

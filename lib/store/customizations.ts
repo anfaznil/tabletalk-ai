@@ -1,100 +1,95 @@
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
 
 export interface Customization {
   id: string;
   name: string;
   description: string;
-  /** Added to the line item total (before tax), per unit. */
   price_modifier: number;
-  /** Empty = applies to all menu items. Otherwise only these item ids. */
   menu_item_ids: string[];
 }
 
-const globalStore = globalThis as unknown as {
-  customizations: Customization[];
-};
-
-if (!globalStore.customizations) {
-  globalStore.customizations = loadPersisted("customizations", () => []);
-}
-
-function persist() {
-  savePersisted("customizations", globalStore.customizations);
-}
-
-export function getCustomizations(): Customization[] {
-  return globalStore.customizations;
-}
-
-export function getCustomization(id: string): Customization | undefined {
-  return globalStore.customizations.find((c) => c.id === id);
-}
-
-export function customizationAppliesTo(
-  customization: Customization,
-  menuItemId: string
-): boolean {
-  if (customization.menu_item_ids.length === 0) return true;
-  return customization.menu_item_ids.includes(menuItemId);
-}
-
-export function getCustomizationsForMenuItem(
-  menuItemId: string
-): Customization[] {
-  return globalStore.customizations.filter((c) =>
-    customizationAppliesTo(c, menuItemId)
-  );
-}
-
-export function addCustomization(
-  input: Omit<Customization, "id">
-): Customization {
-  const customization: Customization = {
-    ...input,
-    id: `cust-${crypto.randomUUID().slice(0, 8)}`,
-    name: input.name.trim(),
-    description: input.description.trim(),
-    price_modifier: Math.max(0, input.price_modifier),
-    menu_item_ids: input.menu_item_ids ?? [],
+function toCustomization(row: {
+  id: string;
+  name: string;
+  description: string;
+  price_modifier: { toNumber(): number };
+  menu_item_ids: string[];
+}): Customization {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    price_modifier: row.price_modifier.toNumber(),
+    menu_item_ids: row.menu_item_ids,
   };
-  globalStore.customizations.push(customization);
-  persist();
-  return customization;
 }
 
-export function updateCustomization(
+export async function getCustomizations(): Promise<Customization[]> {
+  const rid = await getRestaurantId();
+  const rows = await prisma.customization.findMany({ where: { restaurant_id: rid } });
+  return rows.map(toCustomization);
+}
+
+export async function getCustomization(id: string): Promise<Customization | undefined> {
+  const rid = await getRestaurantId();
+  const row = await prisma.customization.findFirst({ where: { id, restaurant_id: rid } });
+  return row ? toCustomization(row) : undefined;
+}
+
+export function customizationAppliesTo(c: Customization, menuItemId: string): boolean {
+  if (c.menu_item_ids.length === 0) return true;
+  return c.menu_item_ids.includes(menuItemId);
+}
+
+export async function getCustomizationsForMenuItem(menuItemId: string): Promise<Customization[]> {
+  const all = await getCustomizations();
+  return all.filter((c) => customizationAppliesTo(c, menuItemId));
+}
+
+export async function addCustomization(input: Omit<Customization, "id">): Promise<Customization> {
+  const rid = await getRestaurantId();
+  const row = await prisma.customization.create({
+    data: {
+      restaurant_id: rid,
+      name: input.name.trim(),
+      description: input.description.trim(),
+      price_modifier: Math.max(0, input.price_modifier),
+      menu_item_ids: input.menu_item_ids ?? [],
+    },
+  });
+  return toCustomization(row);
+}
+
+export async function updateCustomization(
   id: string,
   updates: Partial<Omit<Customization, "id">>
-): Customization | null {
-  const index = globalStore.customizations.findIndex((c) => c.id === id);
-  if (index === -1) return null;
+): Promise<Customization | null> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.customization.findFirst({ where: { id, restaurant_id: rid } });
+  if (!existing) return null;
 
-  const current = globalStore.customizations[index];
-  globalStore.customizations[index] = {
-    ...current,
-    ...updates,
-    name: updates.name !== undefined ? updates.name.trim() : current.name,
-    description:
-      updates.description !== undefined
-        ? updates.description.trim()
-        : current.description,
-    price_modifier:
-      updates.price_modifier !== undefined
-        ? Math.max(0, updates.price_modifier)
-        : current.price_modifier,
-    menu_item_ids:
-      updates.menu_item_ids !== undefined
-        ? updates.menu_item_ids
-        : current.menu_item_ids,
-  };
-  persist();
-  return globalStore.customizations[index];
+  const row = await prisma.customization.update({
+    where: { id },
+    data: {
+      name: updates.name !== undefined ? updates.name.trim() : existing.name,
+      description:
+        updates.description !== undefined ? updates.description.trim() : existing.description,
+      price_modifier:
+        updates.price_modifier !== undefined
+          ? Math.max(0, updates.price_modifier)
+          : existing.price_modifier,
+      menu_item_ids:
+        updates.menu_item_ids !== undefined ? updates.menu_item_ids : existing.menu_item_ids,
+    },
+  });
+  return toCustomization(row);
 }
 
-export function deleteCustomization(id: string): boolean {
-  const index = globalStore.customizations.findIndex((c) => c.id === id);
-  if (index === -1) return false;
-  globalStore.customizations.splice(index, 1);
-  persist();
+export async function deleteCustomization(id: string): Promise<boolean> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.customization.findFirst({ where: { id, restaurant_id: rid } });
+  if (!existing) return false;
+  await prisma.customization.delete({ where: { id } });
   return true;
 }
