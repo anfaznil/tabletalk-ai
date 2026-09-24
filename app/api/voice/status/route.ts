@@ -7,6 +7,8 @@
 import { NextResponse } from "next/server";
 import { getSession, deleteSession } from "@/lib/voice/session";
 import { addCallLog } from "@/lib/store/call-logs";
+import { prisma } from "@/lib/db/prisma";
+import { trackCallMinutes } from "@/lib/billing/subscription";
 import type Anthropic from "@anthropic-ai/sdk";
 
 function extractTranscript(
@@ -40,19 +42,34 @@ export async function POST(request: Request) {
   const session = getSession(callSid);
 
   if (callSid) {
-    void addCallLog({
-      call_sid: callSid,
-      caller_number: session?.callerNumber ?? null,
-      mode: session?.mode ?? "unknown",
-      status: callStatus as CallLogEntry["status"],
-      duration_seconds: callDuration,
-      started_at: startedAt,
-      ended_at: new Date().toISOString(),
-      transcript: session ? extractTranscript(session.messages) : [],
-      transfer_attempted: session?.transferFailed !== undefined ? true : false,
-      transfer_answered: session ? !session.transferFailed : false,
-      recording_url: recordingUrl,
-    });
+    void (async () => {
+      await addCallLog({
+        call_sid: callSid,
+        caller_number: session?.callerNumber ?? null,
+        mode: session?.mode ?? "unknown",
+        status: callStatus as CallLogEntry["status"],
+        duration_seconds: callDuration,
+        started_at: startedAt,
+        ended_at: new Date().toISOString(),
+        transcript: session ? extractTranscript(session.messages) : [],
+        transfer_attempted: session?.transferFailed !== undefined ? true : false,
+        transfer_answered: session ? !session.transferFailed : false,
+        recording_url: recordingUrl,
+      });
+      // Track minutes against the subscription (resolves restaurant from the Twilio number)
+      if (callDuration > 0) {
+        const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
+        if (twilioNumber) {
+          const restaurant = await prisma.restaurant.findFirst({
+            where: { twilio_number: twilioNumber },
+            select: { id: true },
+          });
+          if (restaurant) {
+            void trackCallMinutes(restaurant.id, callDuration);
+          }
+        }
+      }
+    })();
     deleteSession(callSid);
   }
 
