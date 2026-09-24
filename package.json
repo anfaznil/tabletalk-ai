@@ -5,13 +5,23 @@
   "scripts": {
     "dev": "ts-node --project tsconfig.server.json server.ts",
     "dev:next": "next dev --turbopack",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "NODE_ENV=production ts-node --project tsconfig.server.json server.ts",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "ts-node --project tsconfig.server.json prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node --project tsconfig.server.json prisma/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@prisma/client": "^5.22.0",
     "next": "^15.3.3",
+    "prisma": "^5.22.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "twilio": "^6.1.1",
