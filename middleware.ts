@@ -41,5 +41,6 @@ export const config = {
     "/api/voice/settings",
     "/api/call-logs",
     "/calls/:path*",
+    "/onboarding",
   ],
 };

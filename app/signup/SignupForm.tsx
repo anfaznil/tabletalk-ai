@@ -38,7 +38,7 @@ export function SignupForm() {
         return;
       }
 
-      window.location.assign("/");
+      window.location.assign("/onboarding");
     } catch {
       setErrors({ form: "Something went wrong. Please try again." });
     } finally {
