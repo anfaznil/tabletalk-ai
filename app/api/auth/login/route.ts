@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { verifyCredentials } from "@/lib/auth/credentials";
 import {
   createSessionToken,
@@ -24,15 +23,20 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!verifyCredentials(username, password)) {
+    const user = await verifyCredentials(username, password);
+    if (!user) {
       return NextResponse.json(
         { error: "Invalid username or password." },
         { status: 401 }
       );
     }
 
-    const token = await createSessionToken(username);
-    const response = NextResponse.json({ success: true, username });
+    const token = await createSessionToken({
+      username: user.username,
+      restaurant_id: user.restaurant_id,
+      restaurantSlug: user.restaurantSlug,
+    });
+    const response = NextResponse.json({ success: true, username: user.username });
     response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
 
     return response;
