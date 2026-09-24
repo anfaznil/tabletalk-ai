@@ -1,4 +1,5 @@
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
 
 export interface TaxConfig {
   food_beverage_tax_percent: number;
@@ -10,24 +11,35 @@ const DEFAULT_TAXES: TaxConfig = {
   sales_tax_percent: 5.3,
 };
 
-const globalStore = globalThis as unknown as { taxes: TaxConfig };
-
-if (!globalStore.taxes) {
-  globalStore.taxes = loadPersisted("taxes", () => ({ ...DEFAULT_TAXES }));
-}
-
-export function getTaxes(): TaxConfig {
-  return globalStore.taxes;
-}
-
-export function updateTaxes(updates: Partial<TaxConfig>): TaxConfig {
-  globalStore.taxes = {
-    food_beverage_tax_percent:
-      updates.food_beverage_tax_percent ??
-      globalStore.taxes.food_beverage_tax_percent,
-    sales_tax_percent:
-      updates.sales_tax_percent ?? globalStore.taxes.sales_tax_percent,
+export async function getTaxes(): Promise<TaxConfig> {
+  const rid = await getRestaurantId();
+  const row = await prisma.taxRate.findUnique({ where: { restaurant_id: rid } });
+  if (!row) return { ...DEFAULT_TAXES };
+  return {
+    food_beverage_tax_percent: row.food_beverage_rate.toNumber() * 100,
+    sales_tax_percent: row.sales_rate.toNumber() * 100,
   };
-  savePersisted("taxes", globalStore.taxes);
-  return globalStore.taxes;
+}
+
+export async function updateTaxes(updates: Partial<TaxConfig>): Promise<TaxConfig> {
+  const rid = await getRestaurantId();
+  const current = await getTaxes();
+  const next = {
+    food_beverage_tax_percent:
+      updates.food_beverage_tax_percent ?? current.food_beverage_tax_percent,
+    sales_tax_percent: updates.sales_tax_percent ?? current.sales_tax_percent,
+  };
+  await prisma.taxRate.upsert({
+    where: { restaurant_id: rid },
+    create: {
+      restaurant_id: rid,
+      food_beverage_rate: next.food_beverage_tax_percent / 100,
+      sales_rate: next.sales_tax_percent / 100,
+    },
+    update: {
+      food_beverage_rate: next.food_beverage_tax_percent / 100,
+      sales_rate: next.sales_tax_percent / 100,
+    },
+  });
+  return next;
 }

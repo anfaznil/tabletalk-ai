@@ -16,6 +16,9 @@ import { formatCurrency } from "@/lib/utils/format";
 import { addLead, type LeadType } from "@/lib/store/leads";
 import { getStoreInfo } from "@/lib/store/info";
 import { getMenuItems } from "@/lib/store/menu";
+import { getCustomizations } from "@/lib/store/customizations";
+import { getHours } from "@/lib/store/hours";
+import { getTaxes } from "@/lib/store/taxes";
 import {
   notifyOrderPlaced,
   notifyLeadCaptured,
@@ -46,10 +49,10 @@ export interface ToolResult {
   message: string;
 }
 
-export function handleToolCall(
+export async function handleToolCall(
   name: string,
   args: Record<string, unknown>
-): ToolResult {
+): Promise<ToolResult> {
   switch (name) {
     case "quote_order_total":
       return quoteOrderTotal(args);
@@ -124,14 +127,14 @@ function lookupGuidance(name: string, orders: Order[]): string {
   return `${reorderGuidance}\n\n${changeGuidance}`;
 }
 
-function lookupCustomerOrders(args: Record<string, unknown>): ToolResult {
+async function lookupCustomerOrders(args: Record<string, unknown>): Promise<ToolResult> {
   const customer_name = args.customer_name as string;
 
   if (!customer_name?.trim()) {
     return { success: false, message: "Customer name is required to look up orders." };
   }
 
-  const orders = findOrdersByCustomerName(customer_name, { limit: 5 });
+  const orders = await findOrdersByCustomerName(customer_name, { limit: 5 });
 
   if (!orders.length) {
     return {
@@ -149,10 +152,10 @@ function lookupCustomerOrders(args: Record<string, unknown>): ToolResult {
   };
 }
 
-function transferToStaff(args: Record<string, unknown>): ToolResult {
+async function transferToStaff(args: Record<string, unknown>): Promise<ToolResult> {
   const reason = String(args.reason ?? "general").trim();
   const customer_name = (args.customer_name as string | undefined)?.trim();
-  const phone = getStoreInfo().phone;
+  const phone = (await getStoreInfo()).phone;
   const who = customer_name ? ` for ${customer_name}` : "";
 
   return {
@@ -161,13 +164,18 @@ function transferToStaff(args: Record<string, unknown>): ToolResult {
   };
 }
 
-function modifyOrder(args: Record<string, unknown>): ToolResult {
+async function modifyOrder(args: Record<string, unknown>): Promise<ToolResult> {
   try {
     const order_id = args.order_id as string;
     const items = args.items as OrderItemInput[];
-    const menuItems = getMenuItems();
+    const [menuItems, customizations, hours, taxes] = await Promise.all([
+      getMenuItems(),
+      getCustomizations(),
+      getHours(),
+      getTaxes(),
+    ]);
 
-    const order = getOrderById(order_id);
+    const order = await getOrderById(order_id);
     if (!order) {
       return { success: false, message: "Order not found. Call lookup_customer_orders first." };
     }
@@ -187,17 +195,17 @@ function modifyOrder(args: Record<string, unknown>): ToolResult {
       };
     }
 
-    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
-    const { subtotal, tax_total, total } = calculateOrderTotals(rawSubtotal);
+    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems, customizations);
+    const { subtotal, tax_total, total } = calculateOrderTotals(rawSubtotal, taxes);
     const order_size = classifyOrderSize(subtotal);
-    validateOrderForClosing(items, menuItems, order_size);
+    validateOrderForClosing(items, menuItems, order_size, hours);
     const { ready_by, ready_by_display, total_minutes } = calculateReadyBy(
       items,
       menuItems,
       order_size
     );
 
-    const updated = updateOrder(order_id, {
+    const updated = await updateOrder(order_id, {
       items: validated,
       subtotal,
       tax_total,
@@ -234,17 +242,21 @@ function modifyOrder(args: Record<string, unknown>): ToolResult {
   }
 }
 
-function quoteOrderTotal(args: Record<string, unknown>): ToolResult {
+async function quoteOrderTotal(args: Record<string, unknown>): Promise<ToolResult> {
   try {
     const items = args.items as OrderItemInput[];
-    const menuItems = getMenuItems();
+    const [menuItems, customizations, taxes] = await Promise.all([
+      getMenuItems(),
+      getCustomizations(),
+      getTaxes(),
+    ]);
 
     if (!items?.length) {
       return { success: false, message: "No items provided" };
     }
 
-    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
-    const { total } = calculateOrderTotals(rawSubtotal);
+    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems, customizations);
+    const { total } = calculateOrderTotals(rawSubtotal, taxes);
 
     const itemList = formatItemList(validated);
 
@@ -260,18 +272,22 @@ function quoteOrderTotal(args: Record<string, unknown>): ToolResult {
   }
 }
 
-function quoteReadyTime(args: Record<string, unknown>): ToolResult {
+async function quoteReadyTime(args: Record<string, unknown>): Promise<ToolResult> {
   try {
     const items = args.items as OrderItemInput[];
-    const menuItems = getMenuItems();
+    const [menuItems, customizations, hours] = await Promise.all([
+      getMenuItems(),
+      getCustomizations(),
+      getHours(),
+    ]);
 
     if (!items?.length) {
       return { success: false, message: "No items provided" };
     }
 
-    const { subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
+    const { subtotal: rawSubtotal } = validateOrderItems(items, menuItems, customizations);
     const order_size = classifyOrderSize(rawSubtotal);
-    validateOrderForClosing(items, menuItems, order_size);
+    validateOrderForClosing(items, menuItems, order_size, hours);
     const { ready_by_display, total_minutes, rush_applied } = calculateReadyBy(
       items,
       menuItems,
@@ -298,12 +314,17 @@ function quoteReadyTime(args: Record<string, unknown>): ToolResult {
   }
 }
 
-function captureOrder(args: Record<string, unknown>): ToolResult {
+async function captureOrder(args: Record<string, unknown>): Promise<ToolResult> {
   try {
     const customer_name = args.customer_name as string;
     const phone = (args.phone as string) || null;
     const items = args.items as OrderItemInput[];
-    const menuItems = getMenuItems();
+    const [menuItems, customizations, hours, taxes] = await Promise.all([
+      getMenuItems(),
+      getCustomizations(),
+      getHours(),
+      getTaxes(),
+    ]);
 
     if (!items?.length) {
       return {
@@ -320,17 +341,17 @@ function captureOrder(args: Record<string, unknown>): ToolResult {
       };
     }
 
-    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems);
-    const { subtotal, tax_total, total } = calculateOrderTotals(rawSubtotal);
+    const { items: validated, subtotal: rawSubtotal } = validateOrderItems(items, menuItems, customizations);
+    const { subtotal, tax_total, total } = calculateOrderTotals(rawSubtotal, taxes);
     const order_size = classifyOrderSize(subtotal);
-    validateOrderForClosing(items, menuItems, order_size);
+    validateOrderForClosing(items, menuItems, order_size, hours);
     const { ready_by, ready_by_display, total_minutes } = calculateReadyBy(
       items,
       menuItems,
       order_size
     );
 
-    const order = addOrder({
+    const order = await addOrder({
       customer_name,
       phone,
       items: validated,
@@ -367,10 +388,10 @@ function captureOrder(args: Record<string, unknown>): ToolResult {
   }
 }
 
-function captureLead(
+async function captureLead(
   lead_type: LeadType,
   args: Record<string, unknown>
-): ToolResult {
+): Promise<ToolResult> {
   const customer_name = args.customer_name as string;
   const phone = (args.phone as string) || null;
   const event_date = args.event_date as string;
@@ -390,7 +411,7 @@ function captureLead(
     };
   }
 
-  const lead = addLead({
+  const lead = await addLead({
     lead_type,
     customer_name,
     phone,

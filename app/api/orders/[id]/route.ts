@@ -12,7 +12,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
   }
 
-  const order = completeOrder(id);
+  const order = await completeOrder(id);
   if (!order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }

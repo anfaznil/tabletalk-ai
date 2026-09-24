@@ -1,8 +1,5 @@
 import type { MenuItem } from "@/lib/data/deens-bistro";
-import {
-  customizationAppliesTo,
-  getCustomization,
-} from "@/lib/store/customizations";
+import { customizationAppliesTo, type Customization } from "@/lib/store/customizations";
 import { isMenuItemOrderable } from "@/types/menu";
 import type { OrderItem, OrderSize } from "@/types/orders";
 
@@ -21,9 +18,11 @@ export function classifyOrderSize(subtotal: number): OrderSize {
 
 export function validateOrderItems(
   inputs: OrderItemInput[],
-  menuItems: MenuItem[]
+  menuItems: MenuItem[],
+  customizationsList: Customization[]
 ): { items: OrderItem[]; subtotal: number } {
   const menuMap = new Map(menuItems.map((m) => [m.id, m]));
+  const customizationMap = new Map(customizationsList.map((c) => [c.id, c]));
   const items: OrderItem[] = [];
 
   for (const input of inputs) {
@@ -37,9 +36,7 @@ export function validateOrderItems(
 
     if (!isMenuItemOrderable(menuItem.availability)) {
       const reason =
-        menuItem.availability === "sold_out_today"
-          ? "sold out for today"
-          : "sold out";
+        menuItem.availability === "sold_out_today" ? "sold out for today" : "sold out";
       throw new Error(`${menuItem.name} is ${reason}.`);
     }
 
@@ -51,14 +48,12 @@ export function validateOrderItems(
       if (seenIds.has(customizationId)) continue;
       seenIds.add(customizationId);
 
-      const customization = getCustomization(customizationId);
+      const customization = customizationMap.get(customizationId);
       if (!customization) {
         throw new Error(`Unknown customization: ${customizationId}`);
       }
       if (!customizationAppliesTo(customization, menuItem.id)) {
-        throw new Error(
-          `"${customization.name}" is not available on ${menuItem.name}`
-        );
+        throw new Error(`"${customization.name}" is not available on ${menuItem.name}`);
       }
 
       customizations.push({
@@ -68,10 +63,7 @@ export function validateOrderItems(
       });
     }
 
-    const modifierPerUnit = customizations.reduce(
-      (sum, c) => sum + c.price_modifier,
-      0
-    );
+    const modifierPerUnit = customizations.reduce((sum, c) => sum + c.price_modifier, 0);
     const line_total = (menuItem.price + modifierPerUnit) * input.quantity;
 
     items.push({

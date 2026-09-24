@@ -1,4 +1,4 @@
-import { getTaxes } from "@/lib/store/taxes";
+import type { TaxConfig } from "@/lib/store/taxes";
 
 export interface OrderTotals {
   subtotal: number;
@@ -6,14 +6,11 @@ export interface OrderTotals {
   total: number;
 }
 
-export function calculateOrderTotals(subtotal: number): OrderTotals {
-  const taxes = getTaxes();
-  const foodBeverageTax =
-    subtotal * (taxes.food_beverage_tax_percent / 100);
+export function calculateOrderTotals(subtotal: number, taxes: TaxConfig): OrderTotals {
+  const foodBeverageTax = subtotal * (taxes.food_beverage_tax_percent / 100);
   const salesTax = subtotal * (taxes.sales_tax_percent / 100);
   const tax_total = roundMoney(foodBeverageTax + salesTax);
   const total = roundMoney(subtotal + tax_total);
-
   return { subtotal: roundMoney(subtotal), tax_total, total };
 }
 

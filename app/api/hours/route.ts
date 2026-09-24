@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getHours, updateHours } from "@/lib/store/hours";
 
 export async function GET() {
-  return NextResponse.json(getHours());
+  return NextResponse.json(await getHours());
 }
 
 export async function PATCH(request: Request) {
@@ -12,7 +12,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const { hours, errors } = updateHours(body as Record<string, string>);
+  const { hours, errors } = await updateHours(body as Record<string, string>);
 
   if (Object.keys(errors).length > 0) {
     return NextResponse.json({ hours, errors }, { status: 400 });

@@ -11,18 +11,24 @@ function formatWebsiteDisplay(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-export function RestaurantProfileSection() {
-  const store = getStoreInfo();
+export async function RestaurantProfileSection() {
+  const [store, menuItems, hours, faqs] = await Promise.all([
+    getStoreInfo(),
+    getMenuItems(),
+    getHours(),
+    getFaqs(),
+  ]);
+
   const restaurant = {
     ...deensBistro,
     ...store,
-    menu_items: getMenuItems(),
-    hours: getHours(),
-    faqs: getFaqs(),
+    menu_items: menuItems,
+    hours,
+    faqs,
   };
 
   const cityLine = store.address.split(",").slice(-2).join(",").trim();
-  const isHalal = restaurant.faqs.some(
+  const isHalal = faqs.some(
     (faq) =>
       faq.question.toLowerCase().includes("halal") &&
       faq.answer.toLowerCase().startsWith("yes")

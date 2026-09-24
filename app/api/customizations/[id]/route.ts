@@ -6,13 +6,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deleted = deleteCustomization(id);
+  const deleted = await deleteCustomization(id);
 
   if (!deleted) {
-    return NextResponse.json(
-      { error: "Customization not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Customization not found" }, { status: 404 });
   }
 
   return NextResponse.json({ success: true });

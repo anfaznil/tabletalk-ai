@@ -1,21 +1,24 @@
-/**
- * Voice / call-forwarding configuration for the restaurant.
- */
-
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
 
 export type ForwardingMode = "backup" | "full";
 
 export interface VoiceSettings {
-  /**
-   * backup: carrier forwards on no-answer/busy only — staff answer when they can.
-   * full:   carrier forwards all calls — AI answers everything.
-   */
   mode: ForwardingMode;
-  /** Staff / manager transfer number (must differ from the restaurant's main line). */
   transfer_number: string;
-  /** True after the owner has confirmed a test call came through for the current mode. */
   mode_verified: boolean;
+}
+
+function toSettings(row: {
+  mode: string;
+  transfer_number: string;
+  mode_verified: boolean;
+}): VoiceSettings {
+  return {
+    mode: (row.mode === "full" ? "full" : "backup") as ForwardingMode,
+    transfer_number: row.transfer_number,
+    mode_verified: row.mode_verified,
+  };
 }
 
 const DEFAULT_SETTINGS: VoiceSettings = {
@@ -24,43 +27,34 @@ const DEFAULT_SETTINGS: VoiceSettings = {
   mode_verified: false,
 };
 
-const globalStore = globalThis as unknown as { voiceSettings: VoiceSettings };
-
-if (!globalStore.voiceSettings) {
-  globalStore.voiceSettings = {
-    ...DEFAULT_SETTINGS,
-    ...loadPersisted("voiceSettings", () => DEFAULT_SETTINGS),
-  };
+export async function getVoiceSettings(): Promise<VoiceSettings> {
+  const rid = await getRestaurantId();
+  const row = await prisma.voiceSettings.findUnique({ where: { restaurant_id: rid } });
+  return row ? toSettings(row) : { ...DEFAULT_SETTINGS };
 }
 
-export function getVoiceSettings(): VoiceSettings {
-  return globalStore.voiceSettings;
-}
-
-export function updateVoiceSettings(updates: Partial<VoiceSettings>): {
+export async function updateVoiceSettings(updates: Partial<VoiceSettings>): Promise<{
   settings: VoiceSettings;
   error?: string;
-} {
-  const next = { ...globalStore.voiceSettings };
+}> {
+  const rid = await getRestaurantId();
+  const current = await getVoiceSettings();
+  const next = { ...current };
 
   if (updates.mode !== undefined) {
     if (updates.mode !== "backup" && updates.mode !== "full") {
-      return { settings: globalStore.voiceSettings, error: "mode must be 'backup' or 'full'" };
+      return { settings: current, error: "mode must be 'backup' or 'full'" };
     }
-    // Changing mode resets verification — owner must complete a test call.
-    if (updates.mode !== next.mode) {
-      next.mode_verified = false;
-    }
+    if (updates.mode !== next.mode) next.mode_verified = false;
     next.mode = updates.mode;
   }
 
   if (updates.transfer_number !== undefined) {
     const num = updates.transfer_number.trim();
     const mainLine = process.env.TWILIO_PHONE_NUMBER ?? "";
-    // In Full mode, forwarding back to the main Twilio number would loop.
     if (next.mode === "full" && mainLine && num === mainLine) {
       return {
-        settings: globalStore.voiceSettings,
+        settings: current,
         error:
           "Transfer number cannot be the same as the restaurant's Twilio number in Full mode — that would loop calls back to the AI. Use a different number (e.g. a manager's cell).",
       };
@@ -72,7 +66,10 @@ export function updateVoiceSettings(updates: Partial<VoiceSettings>): {
     next.mode_verified = Boolean(updates.mode_verified);
   }
 
-  globalStore.voiceSettings = next;
-  savePersisted("voiceSettings", globalStore.voiceSettings);
-  return { settings: globalStore.voiceSettings };
+  const row = await prisma.voiceSettings.upsert({
+    where: { restaurant_id: rid },
+    create: { restaurant_id: rid, ...next },
+    update: next,
+  });
+  return { settings: toSettings(row) };
 }

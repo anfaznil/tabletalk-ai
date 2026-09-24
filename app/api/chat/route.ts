@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     }
 
     const client = new Anthropic({ apiKey });
-    const context = buildRestaurantContext();
+    const context = await buildRestaurantContext();
     const systemPrompt = buildSystemPrompt(context);
 
     // Build the initial message list in Anthropic format.
@@ -75,9 +75,9 @@ export async function POST(request: Request) {
       ];
 
       // Build a single user message with all tool results.
-      const toolResults: Anthropic.ToolResultBlockParam[] = toolUseBlocks.map(
-        (block) => {
-          const result = handleToolCall(
+      const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+        toolUseBlocks.map(async (block) => {
+          const result = await handleToolCall(
             block.name,
             block.input as Record<string, unknown>
           );
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
             tool_use_id: block.id,
             content: result.message,
           };
-        }
+        })
       );
 
       anthropicMessages = [

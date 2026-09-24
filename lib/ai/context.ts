@@ -6,30 +6,29 @@ import {
 import { getFaqs } from "@/lib/store/faqs";
 import { getHours } from "@/lib/store/hours";
 import { getStoreInfo } from "@/lib/store/info";
-import {
-  customizationAppliesTo,
-  getCustomizations,
-} from "@/lib/store/customizations";
+import { customizationAppliesTo, getCustomizations } from "@/lib/store/customizations";
 import { getMenuItems } from "@/lib/store/menu";
 import { menuItemAvailabilityLabel } from "@/types/menu";
 import { getTaxes } from "@/lib/store/taxes";
 import { formatCurrency } from "@/lib/utils/format";
 
-export function buildRestaurantContext(): string {
-  const restaurant = getStoreInfo();
-  const menuItems = getMenuItems();
+export async function buildRestaurantContext(): Promise<string> {
+  const [restaurant, menuItems, hoursObj, customizations, faqs, taxes] = await Promise.all([
+    getStoreInfo(),
+    getMenuItems(),
+    getHours(),
+    getCustomizations(),
+    getFaqs(),
+    getTaxes(),
+  ]);
 
-  const hours = Object.entries(getHours())
+  const hours = Object.entries(hoursObj)
     .map(([day, h]) => `${day}: ${h}`)
     .join("\n");
 
-  const customizations = getCustomizations();
-
   const menu = [...menuItems]
     .sort((a, b) => {
-      if (a.category !== b.category) {
-        return a.category.localeCompare(b.category);
-      }
+      if (a.category !== b.category) return a.category.localeCompare(b.category);
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     })
     .map((item) => {
@@ -42,9 +41,7 @@ export function buildRestaurantContext(): string {
               .map(
                 (c) =>
                   `${c.name} [id: ${c.id}]${
-                    c.price_modifier > 0
-                      ? ` (+${formatCurrency(c.price_modifier)})`
-                      : ""
+                    c.price_modifier > 0 ? ` (+${formatCurrency(c.price_modifier)})` : ""
                   }`
               )
               .join(", ")}`
@@ -65,27 +62,17 @@ export function buildRestaurantContext(): string {
               c.menu_item_ids.length === 0
                 ? "all items"
                 : c.menu_item_ids
-                    .map(
-                      (id) =>
-                        menuItems.find((m) => m.id === id)?.name ?? id
-                    )
+                    .map((id) => menuItems.find((m) => m.id === id)?.name ?? id)
                     .join(", ");
-            const price =
-              c.price_modifier > 0
-                ? ` (+${formatCurrency(c.price_modifier)})`
-                : "";
+            const price = c.price_modifier > 0 ? ` (+${formatCurrency(c.price_modifier)})` : "";
             return `- ${c.name} [id: ${c.id}]${price} — ${scope}${c.description ? ` — ${c.description}` : ""}`;
           })
           .join("\n")
       : "(none configured)";
 
-  const faqText = getFaqs()
-    .map((f) => `Q: ${f.question}\nA: ${f.answer}`)
-    .join("\n\n");
+  const faqText = faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n");
 
-  const taxes = getTaxes();
-  const combinedRate =
-    taxes.food_beverage_tax_percent + taxes.sales_tax_percent;
+  const combinedRate = taxes.food_beverage_tax_percent + taxes.sales_tax_percent;
 
   const now = new Date();
   const currentDateTime = now.toLocaleString("en-US", {

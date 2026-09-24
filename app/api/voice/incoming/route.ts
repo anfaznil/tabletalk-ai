@@ -42,12 +42,12 @@ export async function POST(request: Request) {
   const callSid = params.get("CallSid") ?? "unknown";
   const callerNumber = params.get("From") ?? undefined;
   const detectedMode = detectMode(params);
-  const voiceSettings = getVoiceSettings();
+  const voiceSettings = await getVoiceSettings();
   const mode = voiceSettings.mode ?? detectedMode;
 
   // Mark this mode as verified the first time a call arrives — confirms forwarding works.
   if (!voiceSettings.mode_verified) {
-    updateVoiceSettings({ mode_verified: true });
+    void updateVoiceSettings({ mode_verified: true });
   }
 
   const session = createSession(callSid, callerNumber, mode);

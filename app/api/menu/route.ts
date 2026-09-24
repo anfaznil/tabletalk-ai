@@ -8,7 +8,7 @@ import {
 } from "@/lib/store/menu";
 
 export async function GET() {
-  return NextResponse.json(getMenuItems());
+  return NextResponse.json(await getMenuItems());
 }
 
 export async function POST(request: Request) {
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "prep_time_minutes must be a non-negative number" }, { status: 400 });
   }
 
-  const item = addMenuItem({
+  const item = await addMenuItem({
     name,
     description: description ?? "",
     price: numericPrice,
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     availability: body.availability ?? "in_stock",
     sort_order: body.sort_order,
   });
-  ensureCategory(item.category);
+  await ensureCategory(item.category);
 
   return NextResponse.json(item, { status: 201 });
 }
@@ -50,7 +50,7 @@ export async function PATCH(request: Request) {
   const body = await request.json();
 
   if (body?.action === "reorder") {
-    const { error } = reorderMenuItemsInCategory(
+    const { error } = await reorderMenuItemsInCategory(
       String(body?.category ?? ""),
       Array.isArray(body?.itemIds) ? body.itemIds.map(String) : []
     );
@@ -59,7 +59,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error }, { status: 400 });
     }
 
-    return NextResponse.json(getMenuItems());
+    return NextResponse.json(await getMenuItems());
   }
 
   const { id, ...updates } = body;
@@ -75,11 +75,11 @@ export async function PATCH(request: Request) {
     }
   }
 
-  const updated = updateMenuItem(id, updates);
+  const updated = await updateMenuItem(id, updates);
   if (!updated) {
     return NextResponse.json({ error: "Menu item not found" }, { status: 404 });
   }
-  ensureCategory(updated.category);
+  await ensureCategory(updated.category);
 
   return NextResponse.json(updated);
 }

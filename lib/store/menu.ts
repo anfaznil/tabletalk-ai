@@ -1,8 +1,20 @@
-import { deensBistro, type MenuItem } from "@/lib/data/deens-bistro";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
 import type { MenuItemAvailability } from "@/types/menu";
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
 
-const globalStore = globalThis as unknown as { menuItems: MenuItem[] };
+export type { MenuItemAvailability } from "@/types/menu";
+
+export interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  prep_time_minutes: number;
+  availability?: MenuItemAvailability;
+  sold_out_today_on?: string;
+  sort_order?: number;
+}
 
 const VALID_AVAILABILITY: MenuItemAvailability[] = [
   "in_stock",
@@ -17,233 +29,174 @@ function getLocalDateKey(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-function applySoldOutTodayReset(item: MenuItem): MenuItem {
-  if (item.availability !== "sold_out_today") {
-    if (!item.sold_out_today_on) return item;
-    const { sold_out_today_on: _removed, ...rest } = item;
-    return rest;
-  }
+function toMenuItem(row: {
+  id: string;
+  name: string;
+  description: string | null;
+  price: { toNumber(): number };
+  category: string;
+  prep_time_minutes: number;
+  availability: string;
+  sold_out_today_on: string | null;
+  position: number;
+}): MenuItem {
+  let availability = (
+    VALID_AVAILABILITY.includes(row.availability as MenuItemAvailability)
+      ? row.availability
+      : "in_stock"
+  ) as MenuItemAvailability;
 
-  const today = getLocalDateKey();
-  const markedOn = item.sold_out_today_on ?? today;
+  let sold_out_today_on: string | undefined = row.sold_out_today_on ?? undefined;
 
-  if (!item.sold_out_today_on) {
-    return { ...item, sold_out_today_on: today };
-  }
-
-  if (markedOn < today) {
-    const { sold_out_today_on: _removed, ...rest } = item;
-    return { ...rest, availability: "in_stock" };
-  }
-
-  return item;
-}
-
-function normalizeMenuItem(item: MenuItem): MenuItem {
-  const availability = VALID_AVAILABILITY.includes(
-    item.availability as MenuItemAvailability
-  )
-    ? (item.availability as MenuItemAvailability)
-    : "in_stock";
-
-  return applySoldOutTodayReset({
-    ...item,
-    availability,
-    sort_order:
-      typeof item.sort_order === "number" && Number.isFinite(item.sort_order)
-        ? item.sort_order
-        : 0,
-  });
-}
-
-function ensureMenuItemDefaults(): void {
-  const normalized = globalStore.menuItems.map(normalizeMenuItem);
-  const availabilityChanged = normalized.some(
-    (item, index) =>
-      item.availability !== globalStore.menuItems[index]?.availability ||
-      item.sold_out_today_on !== globalStore.menuItems[index]?.sold_out_today_on
-  );
-  globalStore.menuItems = normalized;
-
-  const byCategory = new Map<string, MenuItem[]>();
-  for (const item of globalStore.menuItems) {
-    const list = byCategory.get(item.category) ?? [];
-    list.push(item);
-    byCategory.set(item.category, list);
-  }
-
-  let changed = false;
-  for (const items of byCategory.values()) {
-    items.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    items.forEach((item, index) => {
-      if (item.sort_order !== index) {
-        item.sort_order = index;
-        changed = true;
-      }
-    });
-  }
-
-  if (changed || availabilityChanged) persist();
-}
-
-if (!globalStore.menuItems) {
-  globalStore.menuItems = loadPersisted("menuItems", () =>
-    deensBistro.menu_items.map((item, index) =>
-      normalizeMenuItem({
-        ...item,
-        availability: "in_stock",
-        sort_order: index,
-      })
-    )
-  );
-  ensureMenuItemDefaults();
-}
-
-function persist() {
-  savePersisted("menuItems", globalStore.menuItems);
-}
-
-function nextSortOrder(category: string): number {
-  const inCategory = globalStore.menuItems.filter(
-    (item) => item.category.toLowerCase() === category.toLowerCase()
-  );
-  if (!inCategory.length) return 0;
-  return Math.max(...inCategory.map((item) => item.sort_order ?? 0)) + 1;
-}
-
-export function getMenuItems(): MenuItem[] {
-  ensureMenuItemDefaults();
-  return globalStore.menuItems;
-}
-
-export function getMenuItem(id: string): MenuItem | undefined {
-  return getMenuItems().find((item) => item.id === id);
-}
-
-export function updateMenuItem(
-  id: string,
-  updates: Partial<Omit<MenuItem, "id">>
-): MenuItem | null {
-  const index = globalStore.menuItems.findIndex((item) => item.id === id);
-  if (index === -1) return null;
-
-  const nextAvailability =
-    updates.availability !== undefined
-      ? VALID_AVAILABILITY.includes(updates.availability)
-        ? updates.availability
-        : globalStore.menuItems[index].availability
-      : undefined;
-
-  let soldOutTodayOn = globalStore.menuItems[index].sold_out_today_on;
-  if (nextAvailability === "sold_out_today") {
-    soldOutTodayOn = getLocalDateKey();
-  } else if (
-    nextAvailability === "in_stock" ||
-    nextAvailability === "sold_out_indefinitely"
-  ) {
-    soldOutTodayOn = undefined;
-  }
-
-  globalStore.menuItems[index] = {
-    ...globalStore.menuItems[index],
-    ...updates,
-    availability: nextAvailability ?? globalStore.menuItems[index].availability,
-    sold_out_today_on: soldOutTodayOn,
-    prep_time_minutes:
-      updates.prep_time_minutes !== undefined
-        ? Math.max(0, updates.prep_time_minutes)
-        : globalStore.menuItems[index].prep_time_minutes,
-    price:
-      updates.price !== undefined
-        ? Math.max(0, updates.price)
-        : globalStore.menuItems[index].price,
-    sort_order:
-      updates.sort_order !== undefined
-        ? Math.max(0, updates.sort_order)
-        : globalStore.menuItems[index].sort_order,
-  };
-
-  persist();
-  return globalStore.menuItems[index];
-}
-
-export function addMenuItem(item: Omit<MenuItem, "id">): MenuItem {
-  const category = item.category ?? "General";
-  const newItem: MenuItem = {
-    ...item,
-    id: `menu-${crypto.randomUUID().slice(0, 8)}`,
-    category,
-    availability: item.availability ?? "in_stock",
-    sort_order:
-      item.sort_order !== undefined ? item.sort_order : nextSortOrder(category),
-    prep_time_minutes: Math.max(0, item.prep_time_minutes),
-    price: Math.max(0, item.price),
-  };
-  globalStore.menuItems.push(newItem);
-  persist();
-  return newItem;
-}
-
-/** Moves all items in one category to another (used when renaming categories). */
-export function renameMenuItemsCategory(from: string, to: string): void {
-  let changed = false;
-  for (const item of globalStore.menuItems) {
-    if (item.category.toLowerCase() === from.toLowerCase()) {
-      item.category = to;
-      changed = true;
+  // Midnight reset: if sold_out_today was marked on a prior day, restore in_stock.
+  if (availability === "sold_out_today" && sold_out_today_on) {
+    const today = getLocalDateKey();
+    if (sold_out_today_on < today) {
+      availability = "in_stock";
+      sold_out_today_on = undefined;
     }
   }
-  if (changed) {
-    ensureMenuItemDefaults();
-    persist();
-  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? "",
+    price: row.price.toNumber(),
+    category: row.category,
+    prep_time_minutes: row.prep_time_minutes,
+    availability,
+    sold_out_today_on,
+    sort_order: row.position,
+  };
 }
 
-export function reorderMenuItemsInCategory(
+export async function getMenuItems(): Promise<MenuItem[]> {
+  const rid = await getRestaurantId();
+  const rows = await prisma.menuItem.findMany({
+    where: { restaurant_id: rid },
+    orderBy: [{ category: "asc" }, { position: "asc" }],
+  });
+  return rows.map(toMenuItem);
+}
+
+export async function getMenuItem(id: string): Promise<MenuItem | undefined> {
+  const rid = await getRestaurantId();
+  const row = await prisma.menuItem.findFirst({ where: { id, restaurant_id: rid } });
+  return row ? toMenuItem(row) : undefined;
+}
+
+export async function updateMenuItem(
+  id: string,
+  updates: Partial<Omit<MenuItem, "id">>
+): Promise<MenuItem | null> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.menuItem.findFirst({ where: { id, restaurant_id: rid } });
+  if (!existing) return null;
+
+  let availability = existing.availability;
+  let sold_out_today_on = existing.sold_out_today_on;
+
+  if (updates.availability !== undefined && VALID_AVAILABILITY.includes(updates.availability)) {
+    availability = updates.availability;
+    if (availability === "sold_out_today") {
+      sold_out_today_on = getLocalDateKey();
+    } else {
+      sold_out_today_on = null;
+    }
+  }
+
+  const updated = await prisma.menuItem.update({
+    where: { id },
+    data: {
+      name: updates.name ?? existing.name,
+      description: updates.description ?? existing.description,
+      price: updates.price !== undefined ? Math.max(0, updates.price) : existing.price,
+      category: updates.category ?? existing.category,
+      prep_time_minutes:
+        updates.prep_time_minutes !== undefined
+          ? Math.max(0, updates.prep_time_minutes)
+          : existing.prep_time_minutes,
+      availability,
+      sold_out_today_on,
+      position:
+        updates.sort_order !== undefined ? Math.max(0, updates.sort_order) : existing.position,
+    },
+  });
+  return toMenuItem(updated);
+}
+
+export async function addMenuItem(item: Omit<MenuItem, "id">): Promise<MenuItem> {
+  const rid = await getRestaurantId();
+
+  // Determine position: max in category + 1.
+  const agg = await prisma.menuItem.aggregate({
+    where: { restaurant_id: rid, category: item.category ?? "General" },
+    _max: { position: true },
+  });
+  const nextPosition =
+    item.sort_order !== undefined
+      ? item.sort_order
+      : (agg._max.position ?? -1) + 1;
+
+  const created = await prisma.menuItem.create({
+    data: {
+      restaurant_id: rid,
+      name: item.name,
+      description: item.description ?? "",
+      price: Math.max(0, item.price),
+      category: item.category ?? "General",
+      prep_time_minutes: Math.max(0, item.prep_time_minutes),
+      availability: item.availability ?? "in_stock",
+      sold_out_today_on:
+        item.availability === "sold_out_today" ? getLocalDateKey() : null,
+      position: nextPosition,
+    },
+  });
+  return toMenuItem(created);
+}
+
+export async function renameMenuItemsCategory(from: string, to: string): Promise<void> {
+  const rid = await getRestaurantId();
+  await prisma.menuItem.updateMany({
+    where: { restaurant_id: rid, category: { equals: from, mode: "insensitive" } },
+    data: { category: to },
+  });
+}
+
+export async function reorderMenuItemsInCategory(
   category: string,
   orderedIds: string[]
-): { error?: string } {
-  const categoryItems = globalStore.menuItems.filter(
-    (item) => item.category.toLowerCase() === category.toLowerCase()
-  );
-
-  if (orderedIds.length !== categoryItems.length) {
-    return { error: "Invalid item order" };
-  }
-
-  const categoryIdSet = new Set(categoryItems.map((item) => item.id));
-  if (!orderedIds.every((id) => categoryIdSet.has(id))) {
-    return { error: "Invalid item order" };
-  }
-
-  orderedIds.forEach((id, index) => {
-    const item = globalStore.menuItems.find((entry) => entry.id === id);
-    if (item) item.sort_order = index;
+): Promise<{ error?: string }> {
+  const rid = await getRestaurantId();
+  const items = await prisma.menuItem.findMany({
+    where: { restaurant_id: rid, category: { equals: category, mode: "insensitive" } },
+    select: { id: true },
   });
 
-  persist();
+  if (orderedIds.length !== items.length) return { error: "Invalid item order" };
+  const idSet = new Set(items.map((i) => i.id));
+  if (!orderedIds.every((id) => idSet.has(id))) return { error: "Invalid item order" };
+
+  await prisma.$transaction(
+    orderedIds.map((id, index) =>
+      prisma.menuItem.update({ where: { id }, data: { position: index } })
+    )
+  );
   return {};
 }
 
-export function deleteMenuItemsByCategory(category: string): number {
-  const before = globalStore.menuItems.length;
-  globalStore.menuItems = globalStore.menuItems.filter(
-    (item) => item.category.toLowerCase() !== category.toLowerCase()
-  );
-  const deleted = before - globalStore.menuItems.length;
-  if (deleted > 0) {
-    ensureMenuItemDefaults();
-    persist();
-  }
-  return deleted;
+export async function deleteMenuItemsByCategory(category: string): Promise<number> {
+  const rid = await getRestaurantId();
+  const result = await prisma.menuItem.deleteMany({
+    where: { restaurant_id: rid, category: { equals: category, mode: "insensitive" } },
+  });
+  return result.count;
 }
 
-export function deleteMenuItem(id: string): boolean {
-  const index = globalStore.menuItems.findIndex((item) => item.id === id);
-  if (index === -1) return false;
-
-  globalStore.menuItems.splice(index, 1);
-  ensureMenuItemDefaults();
-  persist();
+export async function deleteMenuItem(id: string): Promise<boolean> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.menuItem.findFirst({ where: { id, restaurant_id: rid } });
+  if (!existing) return false;
+  await prisma.menuItem.delete({ where: { id } });
   return true;
 }

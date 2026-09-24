@@ -1,8 +1,5 @@
-import { loadPersisted, savePersisted } from "@/lib/store/persist";
-import {
-  ORDER_RETENTION_MONTHS,
-  type Order,
-} from "@/types/orders";
+import { prisma } from "@/lib/db/prisma";
+import { getRestaurantId } from "@/lib/store/tenant";
 
 export type {
   Order,
@@ -14,64 +11,127 @@ export type {
 
 export { ORDER_RETENTION_MONTHS } from "@/types/orders";
 
-const globalStore = globalThis as unknown as { orders: Order[] };
+import type { Order, OrderItem, OrderSize } from "@/types/orders";
 
-function normalizeOrder(order: Order): Order {
+type PrismaOrderItem = {
+  id: string;
+  menu_item_id: string | null;
+  item_name: string;
+  quantity: number;
+  unit_price: { toNumber(): number };
+  line_total: { toNumber(): number };
+  customization_ids: string[];
+  customization_names: string[];
+  customization_price_modifiers: { toNumber(): number }[];
+  notes: string | null;
+};
+
+type PrismaOrder = {
+  id: string;
+  customer_name: string;
+  phone: string | null;
+  order_size: string;
+  subtotal: { toNumber(): number };
+  tax_total: { toNumber(): number };
+  total: { toNumber(): number };
+  status: string;
+  ready_by: Date | null;
+  notes: string | null;
+  created_at: Date;
+  completed_at: Date | null;
+  items: PrismaOrderItem[];
+};
+
+function toOrderItem(row: PrismaOrderItem): OrderItem {
+  const customizations = row.customization_ids.map((id, i) => ({
+    id,
+    name: row.customization_names[i] ?? "",
+    price_modifier: row.customization_price_modifiers[i]?.toNumber() ?? 0,
+  }));
   return {
-    ...order,
-    completed_at: order.completed_at ?? null,
-    items: order.items.map((item) => ({
-      ...item,
-      customizations: item.customizations ?? [],
-    })),
+    menu_item_id: row.menu_item_id ?? "",
+    item_name: row.item_name,
+    quantity: row.quantity,
+    unit_price: row.unit_price.toNumber(),
+    line_total: row.line_total.toNumber(),
+    customizations,
+    notes: row.notes,
   };
 }
 
-function pruneOldOrders(): void {
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - ORDER_RETENTION_MONTHS);
-  globalStore.orders = globalStore.orders
-    .map(normalizeOrder)
-    .filter((o) => new Date(o.created_at) >= cutoff);
+function toOrder(row: PrismaOrder): Order {
+  return {
+    id: row.id,
+    customer_name: row.customer_name,
+    phone: row.phone,
+    items: row.items.map(toOrderItem),
+    subtotal: row.subtotal.toNumber(),
+    tax_total: row.tax_total.toNumber(),
+    total: row.total.toNumber(),
+    order_size: row.order_size as OrderSize,
+    ready_by: row.ready_by?.toISOString() ?? "",
+    notes: row.notes,
+    status: row.status as Order["status"],
+    created_at: row.created_at.toISOString(),
+    completed_at: row.completed_at?.toISOString() ?? null,
+  };
 }
 
-if (!globalStore.orders) {
-  globalStore.orders = loadPersisted("orders", () => []);
-  pruneOldOrders();
-  savePersisted("orders", globalStore.orders);
-}
+const ORDER_INCLUDE = { items: { orderBy: { id: "asc" as const } } };
 
-function persist() {
-  pruneOldOrders();
-  savePersisted("orders", globalStore.orders);
-}
-
-export function addOrder(
+export async function addOrder(
   input: Omit<Order, "id" | "created_at" | "status" | "completed_at">
-): Order {
-  const order: Order = {
-    ...input,
-    id: crypto.randomUUID(),
-    status: "pending",
-    completed_at: null,
-    created_at: new Date().toISOString(),
-    items: input.items.map((item) => ({
-      ...item,
-      customizations: item.customizations ?? [],
-    })),
-  };
-  globalStore.orders.unshift(order);
-  persist();
-  return order;
+): Promise<Order> {
+  const rid = await getRestaurantId();
+
+  const created = await prisma.order.create({
+    data: {
+      restaurant_id: rid,
+      customer_name: input.customer_name,
+      phone: input.phone,
+      order_size: input.order_size,
+      subtotal: input.subtotal,
+      tax_total: input.tax_total,
+      total: input.total,
+      status: "pending",
+      ready_by: input.ready_by ? new Date(input.ready_by) : null,
+      notes: input.notes,
+      items: {
+        create: input.items.map((item) => ({
+          menu_item_id: item.menu_item_id || null,
+          item_name: item.item_name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          line_total: item.line_total,
+          customization_ids: item.customizations.map((c) => c.id),
+          customization_names: item.customizations.map((c) => c.name),
+          customization_price_modifiers: item.customizations.map((c) => c.price_modifier),
+          notes: item.notes,
+        })),
+      },
+    },
+    include: ORDER_INCLUDE,
+  });
+  return toOrder(created as unknown as PrismaOrder);
 }
 
-export function getOrders(): Order[] {
-  return globalStore.orders.map(normalizeOrder);
+export async function getOrders(): Promise<Order[]> {
+  const rid = await getRestaurantId();
+  const rows = await prisma.order.findMany({
+    where: { restaurant_id: rid },
+    orderBy: { created_at: "desc" },
+    include: ORDER_INCLUDE,
+  });
+  return rows.map((r) => toOrder(r as unknown as PrismaOrder));
 }
 
-export function getOrderById(id: string): Order | null {
-  const order = globalStore.orders.find((o) => o.id === id);
-  return order ? normalizeOrder(order) : null;
+export async function getOrderById(id: string): Promise<Order | null> {
+  const rid = await getRestaurantId();
+  const row = await prisma.order.findFirst({
+    where: { id, restaurant_id: rid },
+    include: ORDER_INCLUDE,
+  });
+  return row ? toOrder(row as unknown as PrismaOrder) : null;
 }
 
 function normalizeCustomerName(name: string): string {
@@ -83,7 +143,6 @@ function customerNamesMatch(orderName: string, searchName: string): boolean {
   const search = normalizeCustomerName(searchName);
   if (!order || !search) return false;
   if (order === search) return true;
-
   const orderFirst = order.split(/\s+/)[0];
   const searchFirst = search.split(/\s+/)[0];
   return (
@@ -93,20 +152,29 @@ function customerNamesMatch(orderName: string, searchName: string): boolean {
   );
 }
 
-function isToday(dateIso: string, at: Date = new Date()): boolean {
-  return new Date(dateIso).toDateString() === at.toDateString();
-}
-
-export function findOrdersByCustomerName(
+export async function findOrdersByCustomerName(
   name: string,
   options: { limit?: number; todayOnly?: boolean } = {}
-): Order[] {
+): Promise<Order[]> {
   const { limit = 5, todayOnly = false } = options;
   if (!normalizeCustomerName(name)) return [];
 
-  return getOrders()
+  const rid = await getRestaurantId();
+  const cutoff = todayOnly ? (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })() : undefined;
+
+  const rows = await prisma.order.findMany({
+    where: {
+      restaurant_id: rid,
+      ...(cutoff ? { created_at: { gte: cutoff } } : {}),
+    },
+    orderBy: { created_at: "desc" },
+    include: ORDER_INCLUDE,
+    take: 200,
+  });
+
+  return rows
+    .map((r) => toOrder(r as unknown as PrismaOrder))
     .filter((o) => customerNamesMatch(o.customer_name, name))
-    .filter((o) => !todayOnly || isToday(o.created_at))
     .sort((a, b) => {
       if (a.status === "pending" && b.status !== "pending") return -1;
       if (b.status === "pending" && a.status !== "pending") return 1;
@@ -115,43 +183,57 @@ export function findOrdersByCustomerName(
     .slice(0, limit);
 }
 
-export function updateOrder(
+export async function updateOrder(
   id: string,
-  updates: Pick<
-    Order,
-    "items" | "subtotal" | "tax_total" | "total" | "order_size" | "ready_by" | "notes"
-  >
-): Order | null {
-  const index = globalStore.orders.findIndex((o) => o.id === id);
-  if (index === -1) return null;
+  updates: Pick<Order, "items" | "subtotal" | "tax_total" | "total" | "order_size" | "ready_by" | "notes">
+): Promise<Order | null> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.order.findFirst({ where: { id, restaurant_id: rid } });
+  if (!existing || existing.status !== "pending") return null;
 
-  const current = normalizeOrder(globalStore.orders[index]);
-  if (current.status !== "pending") return null;
+  await prisma.orderItem.deleteMany({ where: { order_id: id } });
 
-  globalStore.orders[index] = {
-    ...current,
-    ...updates,
-    items: updates.items.map((item) => ({
-      ...item,
-      customizations: item.customizations ?? [],
-    })),
-  };
-  persist();
-  return globalStore.orders[index];
+  const updated = await prisma.order.update({
+    where: { id },
+    data: {
+      order_size: updates.order_size,
+      subtotal: updates.subtotal,
+      tax_total: updates.tax_total,
+      total: updates.total,
+      ready_by: updates.ready_by ? new Date(updates.ready_by) : null,
+      notes: updates.notes,
+      items: {
+        create: updates.items.map((item) => ({
+          menu_item_id: item.menu_item_id || null,
+          item_name: item.item_name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          line_total: item.line_total,
+          customization_ids: item.customizations.map((c) => c.id),
+          customization_names: item.customizations.map((c) => c.name),
+          customization_price_modifiers: item.customizations.map((c) => c.price_modifier),
+          notes: item.notes,
+        })),
+      },
+    },
+    include: ORDER_INCLUDE,
+  });
+  return toOrder(updated as unknown as PrismaOrder);
 }
 
-export function completeOrder(id: string): Order | null {
-  const index = globalStore.orders.findIndex((o) => o.id === id);
-  if (index === -1) return null;
+export async function completeOrder(id: string): Promise<Order | null> {
+  const rid = await getRestaurantId();
+  const existing = await prisma.order.findFirst({
+    where: { id, restaurant_id: rid },
+    include: ORDER_INCLUDE,
+  });
+  if (!existing) return null;
+  if (existing.status === "completed") return toOrder(existing as unknown as PrismaOrder);
 
-  const current = normalizeOrder(globalStore.orders[index]);
-  if (current.status === "completed") return current;
-
-  globalStore.orders[index] = {
-    ...current,
-    status: "completed",
-    completed_at: new Date().toISOString(),
-  };
-  persist();
-  return globalStore.orders[index];
+  const updated = await prisma.order.update({
+    where: { id },
+    data: { status: "completed", completed_at: new Date() },
+    include: ORDER_INCLUDE,
+  });
+  return toOrder(updated as unknown as PrismaOrder);
 }
