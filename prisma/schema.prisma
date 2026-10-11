@@ -247,7 +247,7 @@ model Subscription {
   current_period_end      DateTime?
   minute_cap              Int        @default(500)   // minutes per billing period
   minutes_used            Int        @default(0)
-  overage_rate_cents      Int        @default(5)     // cents per minute over cap
+  overage_rate_cents      Int        @default(10)    // cents per minute over cap
   created_at              DateTime   @default(now())
   updated_at              DateTime   @updatedAt
 
