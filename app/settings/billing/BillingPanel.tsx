@@ -33,7 +33,7 @@ function ProgressBar({ used, cap }: { used: number; cap: number }) {
       </div>
       {pct >= 80 && pct < 100 && (
         <p className="mt-1 text-xs text-amber-600">
-          Approaching limit — additional minutes billed at $0.10/min
+          Approaching limit — additional minutes billed at $0.05/min
         </p>
       )}
       {pct >= 100 && (
@@ -100,7 +100,7 @@ export function BillingPanel({ sub }: { sub: SubscriptionInfo | null }) {
                 {STATUS_LABELS[sub.status] ?? sub.status}
               </span>
             </div>
-            <p className="mt-0.5 text-sm text-stone-500">$149/month · includes {sub.minuteCap} AI minutes</p>
+            <p className="mt-0.5 text-sm text-stone-500">$199/month · includes {sub.minuteCap} AI minutes</p>
           </div>
           <button
             onClick={handleManage}
